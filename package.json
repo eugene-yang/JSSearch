@@ -1,0 +1,16 @@
+{
+  "name": "ir-search-engine",
+  "version": "0.0.1",
+  "description": "2016 Fall Georgetown University Computer Science Information Retrieval Project",
+  "main": "run.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "javascript",
+    "information-retrieval",
+    "search-engine"
+  ],
+  "author": "Eugene Yang",
+  "license": "ISC"
+}
