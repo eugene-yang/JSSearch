@@ -69,9 +69,14 @@
 
 	JSSU.DefaultTokenizer = function(txt){
 		this.txt = txt.replace(/[\n\r|\n|\n\r]+/g, " ").toLowerCase();
-		this.tokens = { word: [], rule: {}, terms: {} };
+		this.tokens = { word: {}, rule: {}, terms: {} };
 	}
 	JSSU.DefaultTokenizer.prototype = {
+		_increment: function(target, list){
+			list.forEach(function(elem){
+				typeof target[elem] === 'undefined' ? (target[elem] = 1) : (target[elem]++);
+			})
+		},
 		run: function(){
 			// run all type identifiers in proper sequence
 
@@ -85,6 +90,8 @@
 			this.tokens.rule.Number = this.parseNumber();
 			// case f: Date
 			this.tokens.rule.Date = this.parseDate();
+			// case c,d,e: Hyphenated terms
+			this._increment(this.tokens.word, this.parseHyphenatedTerms());
 
 			return this.tokens;	
 		},
@@ -143,7 +150,7 @@
 			var org = this.txt.match( JSSConst.RE.Date ) || [],
 				res = [];
 			org.forEach(function(dat){
-				console.log(dat);
+				log(dat);
 				// remove st,nd,th after number
 				(/\d\s?(st|nd|th)/).test(dat) && ( dat = dat.replace(/(st|nd|th)/, "") );
 				if( !isNaN(Date.parse(dat)) ){
@@ -151,6 +158,16 @@
 				}
 			})
 			return res;
+		},
+		parseHyphenatedTerms: function(){
+			var rawTerms = this.txt.match( JSSConst.RE.Hyphenated ) || [],
+				mix = [];
+			log(rawTerms);
+			rawTerms.forEach(function(elem){
+				mix.push(elem.replace("-",""));
+				mix.push.apply(mix, elem.match(/[a-z]{3,}/ig) );
+			})
+			return mix;
 		}
 
 	}
