@@ -2,6 +2,10 @@
   "name": "ir-search-engine",
   "version": "0.0.1",
   "description": "2016 Fall Georgetown University Computer Science Information Retrieval Project",
+  "repository": {
+    "type": "git",
+    "url": "https://bitbucket.org/eugene2528/irsearchengine"
+  },
   "main": "run.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
