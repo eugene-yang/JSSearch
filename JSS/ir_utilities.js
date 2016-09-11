@@ -82,7 +82,9 @@
 			// case i: Email
 			this.tokens.rule.Email = this.parseEmail();
 			// case g: Number
-			this.tokens.rule.number = this.parseNumber();
+			this.tokens.rule.Number = this.parseNumber();
+			// case f: Date
+			this.tokens.rule.Date = this.parseDate();
 
 			return this.tokens;	
 		},
@@ -136,7 +138,19 @@
 				res.push( parseFloat(num.replace(/,/g,"")) );
 			})
 			return res;
-
+		},
+		parseDate: function(){
+			var org = this.txt.match( JSSConst.RE.Date ) || [],
+				res = [];
+			org.forEach(function(dat){
+				console.log(dat);
+				// remove st,nd,th after number
+				(/\d\s?(st|nd|th)/).test(dat) && ( dat = dat.replace(/(st|nd|th)/, "") );
+				if( !isNaN(Date.parse(dat)) ){
+					res.push( new Date(dat) );
+				}
+			})
+			return res;
 		}
 
 	}

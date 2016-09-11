@@ -26,6 +26,8 @@
 		},
 		Email: /[\w-\.]+@[\w\-]+(\.[\w\-]+)+/ig,
 		Number: /\d+(\,\d{3})*(\.\d+)?/ig,
+		// This only match the format but do not check for the content
+		Date: /(\w{3,}|\d{1,4})[\,\s\\\/\.-]{0,2}\d{1,2}(\s?(st|nd|th))?[\,\s\\\/\.-]{1,2}(\d{1,4}|'\d{2})/ig
 	}
 
 }))

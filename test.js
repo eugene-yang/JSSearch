@@ -4,5 +4,6 @@ var JSSU = require('./JSS/ir_utilities.js')
 // var text = new JSSU.String("I'm a Ph.D Student enrolled in PhD program in Georgetown University");
 // var text = new JSSU.String("For more information, please check www.google.com/?aaa=123");
 // var text = new JSSU.String("my domain tv.com is at ip 6.6.6.6");
-var text = new JSSU.String("my email is eugene@leadinfo.com.tw with money 1,333,555.32 and 13154.32 and 45687 and 789789.00");
+// var text = new JSSU.String("my email is eugene@leadinfo.com.tw with money 1,333,555.32 and 13154.32 and 45687 and 789789.00");
+var text = new JSSU.String("10/12/1992   10-10-2016   November 25 1999   Jan-10-1992   Apr-44-5555  10-12-'16  October 12 th 1992");
 text.token
