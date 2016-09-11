@@ -73,6 +73,8 @@
 	}
 	JSSU.DefaultTokenizer.prototype = {
 		_increment: function(target, list){
+			if(typeof list === 'undefined') return ;
+			!Array.isArray(list) && ( list = [list] );
 			list.forEach(function(elem){
 				typeof target[elem] === 'undefined' ? (target[elem] = 1) : (target[elem]++);
 			})
@@ -94,6 +96,8 @@
 			this.tokens.rule.Date = this.parseDate();
 			// case c,d,e: Hyphenated terms
 			this._increment(this.tokens.word, this.parseHyphenatedTerms());
+			// case a and general word parser
+			this._increment(this.tokens.word, this.parseGeneralWord());
 
 			return this.tokens;	
 		},
@@ -152,7 +156,7 @@
 			var org = this.txt.match( JSSConst.RE.Number ) || [],
 				res = [];
 			org.forEach(function(num){
-				res.push( parseFloat(num.replace(/,/g,"")) );
+				res.push( parseFloat(num.replace(/[^(\d|\.)]/g,"")) );
 			})
 			return res;
 		},
@@ -160,7 +164,6 @@
 			var org = this.txt.match( JSSConst.RE.Date ) || [],
 				res = [];
 			org.forEach(function(dat){
-				log(dat);
 				// remove st,nd,th after number
 				(/\d\s?(st|nd|th)/).test(dat) && ( dat = dat.replace(/(st|nd|th)/, "") );
 				if( !isNaN(Date.parse(dat)) ){
@@ -177,6 +180,9 @@
 				mix.push.apply(mix, elem.match(/[a-z]{3,}/ig) );
 			})
 			return mix;
+		},
+		parseGeneralWord: function(){
+			return this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ").match( JSSConst.RE.GeneralWord );
 		}
 
 	}
