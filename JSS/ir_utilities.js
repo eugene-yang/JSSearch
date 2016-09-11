@@ -86,6 +86,8 @@
 			this.tokens.rule.IP = this.parseIP();
 			// case i: Email
 			this.tokens.rule.Email = this.parseEmail();
+			// case h: File Extension
+			this.tokens.rule.exts = this.parseFileExtension();
 			// case g: Number
 			this.tokens.rule.Number = this.parseNumber();
 			// case f: Date
@@ -138,6 +140,14 @@
 			})
 			return res;
 		},
+		parseFileExtension: function(){
+			var raw = this.txt.match( JSSConst.RE.FileExtension ) || [],
+				exts = [];
+			raw.forEach(function(fn){
+				exts.push( fn.split(".")[1] );
+			})
+			return exts;
+		},
 		parseNumber: function(){
 			var org = this.txt.match( JSSConst.RE.Number ) || [],
 				res = [];
@@ -162,7 +172,6 @@
 		parseHyphenatedTerms: function(){
 			var rawTerms = this.txt.match( JSSConst.RE.Hyphenated ) || [],
 				mix = [];
-			log(rawTerms);
 			rawTerms.forEach(function(elem){
 				mix.push(elem.replace("-",""));
 				mix.push.apply(mix, elem.match(/[a-z]{3,}/ig) );

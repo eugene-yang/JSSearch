@@ -25,7 +25,8 @@
 			v4: /(\d{1,3}\.){3}\d{1,3}/g,
 		},
 		Email: /[\w-\.]+@[\w\-]+(\.[\w\-]+)+/ig,
-		Number: /\d+(\,\d{3})*(\.\d+)?/ig,
+		FileExtension: /\w+\.\w+/ig,
+		Number: /(\s|^)\d+(\,\d{3})*(\.\d+)?(\s|$)/ig,
 		// This only match the format but do not check for the content
 		// Date: /(\w{3,}|\d{1,4})[\,\s\\\/\.-]{0,2}\d{1,2}(\s?(st|nd|th))?[\,\s\\\/\.-]{1,2}(\d{1,4}|'\d{2})/ig,
 		Date: /((\w{3}\.?|\w{4,})[\,\s-]{0,2}\d{1,2}(\s?(st|nd|th))?[\,\s-]{1,2}(\d{4}|'\d{2}))|(('?\d{2}|\d{4})[\,\s\/-]\d{1,4}[\,\s\/-](\d{4}|'?\d{2}))/ig,
