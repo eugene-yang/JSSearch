@@ -49,6 +49,28 @@
 		}
 	})
 
+	JSSU.eatSet = function(){
+		this._set = [];
+	}
+	JSSU.eatSet.prototype = {
+		push: function(match){
+			this._set.push( [match.index, match.index+match[0].length-1] );
+		},
+		getRemain: function(text){
+			var ntext = "";
+			this._set.sort(function(a,b){ return a[0]-b[0]; })
+
+			start = 0
+			for(i=0; i<this._set.length; i++){
+				leng = this._set[i][0] - start;
+				ntext += text.substr(start, leng);
+				start = this._set[i][1] + 1;
+			}
+			ntext += text.substr(start);
+			return ntext;
+		}
+	}
+
 	/** 
 	 * Factory Function of tokenizer
 	 * @param  {orignal text}
@@ -79,46 +101,79 @@
 				typeof target[elem] === 'undefined' ? (target[elem] = 1) : (target[elem]++);
 			})
 		},
+		_addPosition: function(target, key, obj){
+			// this method accepts list of {word, pos} 
+			// obj accept either position, which is a pair(array) of number for [start,end] index,
+			// or regex.exec result object
+			if( typeof(obj) === 'undefined' && key instanceof Array ){
+				l = key;
+				for( i=0; i<l.length; i++ ){
+					this._addPosition( target, l[i].word, l[i].pos );
+				}
+			}
+			else {
+				position = obj
+				if( !!obj.index )
+					position = [ obj.index, obj.index + obj[0].length - 1 ]
+
+				if( !(target[key] instanceof Array) )
+					target[key] = [];
+				target[key].push(position);
+			}
+		},
+		_eatTxt: function(eatSet){
+			//this.txt = this.txt.substr(0, start) + this.txt.substr( start + leng - 1 );
+			this.txt = eatSet.getRemain(this.txt);
+		},
 		run: function(){
 			// run all type identifiers in proper sequence
 
-			// case k: URL
-			this.tokens.rule.URL = this.parseURL();
-			// case j: IP addresses
-			this.tokens.rule.IP = this.parseIP();
-			// case i: Email
-			this.tokens.rule.Email = this.parseEmail();
-			// case h: File Extension
-			this.tokens.rule.exts = this.parseFileExtension();
-			// case g: Number
-			this.tokens.rule.Number = this.parseNumber();
 			// case f: Date
 			this.tokens.rule.Date = this.parseDate();
+			// case j: IP addresses
+			this.tokens.rule.IP = this.parseIP();
+			// case g: Number
+			this.tokens.rule.Number = this.parseNumber();
+			// case i: Email
+			this.tokens.rule.Email = this.parseEmail();
+			// case h: File Extension : don't eat
+			this.tokens.rule.exts = this.parseFileExtension();
+			// case k: URL
+			this.tokens.rule.URL = this.parseURL();
 			// case c,d,e: Hyphenated terms
-			this._increment(this.tokens.word, this.parseHyphenatedTerms());
+			this._addPosition(this.tokens.word, this.parseHyphenatedTerms());
 			// case a and general word parser
-			this._increment(this.tokens.word, this.parseGeneralWord());
+			this._addPosition(this.tokens.word, this.parseGeneralWord());
 
 			return this.tokens;	
 		},
 		parseURL: function(){
+			eatSet = new JSSU.eatSet();
 			var res = {
-				URL: this.txt.match( JSSConst.RE.URL.general ) || [],
-				protocol: [], server: []
+				URL: {},
+				protocol: {}, server: {}
 			}
-			res.URL.forEach(function(url){
-				p = url.match( JSSConst.RE.URL.Protocol );
-				p !== null && res.protocol.push( p[0].replace("://", "") );
-				s = url.match( JSSConst.RE.URL.Server );
-				s !== null && res.server.push( s[0] );
-			})
+			while( (match=JSSConst.RE.URL.general.exec(this.txt)) != null ){
+				url = match[0];
+				this._addPosition(res.URL, url, [match.index, match.index + url.length - 1]);
+				while( (p = JSSConst.RE.URL.Protocol.exec(url) ) !== null ){
+					p = p[0].replace("://", "")
+					this._addPosition(res.protocol, p, [match.index, match.index + p.length - 1]);
+				}
+				while( (s = JSSConst.RE.URL.Server.exec(url)) !== null )
+					this._addPosition(res.server, s[0], [match.index + s.index, match.index + s.index + s[0].length - 1])
+
+				eatSet.push(match)
+			}
+			this._eatTxt(eatSet);
+			
 			return res;
 		},
 		parseIP: function(){
-			res = { v4:[], v6:[] };
-			var v4 = this.txt.match( JSSConst.RE.IP.v4 ) || [],
-				v6 = this.txt.match( JSSConst.RE.IP.v6 ) || [];
-			v4.forEach(function(ip){
+			res = {}
+			eatSet = new JSSU.eatSet();
+			while( (match=JSSConst.RE.IP.v4.exec(this.txt)) != null ){
+				ip = match[0]
 				sp = ip.split('.');					
 				if( sp.length == 4){
 					check = true;
@@ -126,63 +181,90 @@
 						if( i==0 && parseInt(num) == 0 ) check = false;
 						if( parseInt(num) < 0 || parseInt(num) > 254 ) check = false;
 					})
-					check && res.v4.push( ip );
+					check && ( this._addPosition(res, ip, match), eatSet.push(match) );
 				}
-			})
+			}
+			this._eatTxt(eatSet);
+
 			return res;
 		},
 		parseEmail: function(){
-			var res = {
-				address: this.txt.match( JSSConst.RE.Email ) || [],
-				local: [],
-				domain: []
-			}
-			res.address.forEach(function(add){
+			var res = { address: {}, local: {}, domain: {} },
+				eatSet = new JSSU.eatSet();
+			while( (match = JSSConst.RE.Email.exec(this.txt)) != null ){
+				add = match[0];
+				this._addPosition( res.address, add, match );
 				sp = add.split("@");
-				res.local.push(sp[0]);
-				res.domain.push(sp[1]);
-			})
+				this._addPosition( res.local, sp[0], [match.index, match.index + sp[0].length - 1] )
+				this._addPosition( res.domain, sp[1], [match.index + sp[0].length + 1, match.index + sp[0].length + sp[1].length] )
+				eatSet.push( match )
+			}
+			this._eatTxt(eatSet);
 			return res;
 		},
 		parseFileExtension: function(){
-			var raw = this.txt.match( JSSConst.RE.FileExtension ) || [],
-				exts = [];
-			raw.forEach(function(fn){
-				exts.push( fn.split(".")[1] );
-			})
-			return exts;
+			var res = {},
+				eatSet = new JSSU.eatSet();
+			while( (match = JSSConst.RE.FileExtension.exec(this.txt)) != null ){
+				var fn = match[0].split(".");
+				this._addPosition( res, fn[1], [match.index + fn[0].length, match.index + match[0].length - 1 ] )
+				eatSet.push( match )
+			}
+			// don't eat the word, save for url parsing
+			//this._eatTxt(eatSet);
+
+			return res;
 		},
 		parseNumber: function(){
-			var org = this.txt.match( JSSConst.RE.Number ) || [],
-				res = [];
-			org.forEach(function(num){
-				res.push( parseFloat(num.replace(/[^(\d|\.)]/g,"")) );
-			})
+			var res = {},
+				eatSet = new JSSU.eatSet();
+			while( (match = JSSConst.RE.Number.exec(this.txt)) != null ){
+				this._addPosition( res, parseFloat(match[0].replace(/[^(\d|\.)]/g,"")), match );
+				eatSet.push(match);
+			}
+			this._eatTxt(eatSet);
 			return res;
 		},
 		parseDate: function(){
-			var org = this.txt.match( JSSConst.RE.Date ) || [],
-				res = [];
-			org.forEach(function(dat){
-				// remove st,nd,th after number
+			var res = {},
+				eatSet = new JSSU.eatSet();
+			while( (match = JSSConst.RE.Date.exec(this.txt)) != null ){
+				dat = match[0];
 				(/\d\s?(st|nd|th)/).test(dat) && ( dat = dat.replace(/(st|nd|th)/, "") );
 				if( !isNaN(Date.parse(dat)) ){
-					res.push( new Date(dat) );
+					this._addPosition( res, new Date(dat), [match.index, match.index + dat.length - 1] )
+					eatSet.push( match )
 				}
-			})
+			}
+			this._eatTxt(eatSet);
+
 			return res;
 		},
 		parseHyphenatedTerms: function(){
 			var rawTerms = this.txt.match( JSSConst.RE.Hyphenated ) || [],
 				mix = [];
-			rawTerms.forEach(function(elem){
-				mix.push(elem.replace("-",""));
-				mix.push.apply(mix, elem.match(/[a-z]{3,}/ig) );
-			})
+
+			while( (match = JSSConst.RE.Hyphenated.exec(this.txt)) != null ){
+				elem = match[0];
+				// mix.push({ word: elem.replace("-",""), pos: [match.index, match.index + elem.length - 1] });
+				parts = elem.split("-")
+				if( parts[0].length >= 3 )
+					mix.push( { word: parts[0], pos: [match.index, match.index + parts[0].length - 1] } )
+				if( parts[1].length >= 3 )
+					mix.push( { word: parts[1], pos: [match.index + parts[0].length, match.index + elem.length - 1] } )
+
+			}
 			return mix;
 		},
 		parseGeneralWord: function(){
-			return this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ").match( JSSConst.RE.GeneralWord );
+			var res = [],
+				revisedText = this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ");
+			while( (match = JSSConst.RE.GeneralWord.exec(revisedText)) != null ){
+				res.push({word: match[0], pos: [match.index, match.index + match[0].length -1 ]})
+			}
+			return res;
+
+			
 		}
 
 	}
