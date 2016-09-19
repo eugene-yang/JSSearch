@@ -49,7 +49,6 @@
 					yield* this.getFlatIterator( obj[item], item );
 				}
 			}
-
 		}
 	}
 	Object.defineProperties(JSSU.String.prototype, {
@@ -198,14 +197,14 @@
 			return res;
 		},
 		parseEmail: function(){
-			var res = { address: {}, local: {}, domain: {} },
+			var res = { address: {}, username: {}, server: {} },
 				eatSet = new JSSU.eatSet();
 			while( (match = JSSConst.RE.Email.exec(this.txt)) != null ){
 				add = match[0];
 				this._addPosition( res.address, add, match );
 				sp = add.split("@");
-				this._addPosition( res.local, sp[0], [match.index, match.index + sp[0].length - 1] )
-				this._addPosition( res.domain, sp[1], [match.index + sp[0].length + 1, match.index + sp[0].length + sp[1].length] )
+				this._addPosition( res.username, sp[0], [match.index, match.index + sp[0].length - 1] )
+				this._addPosition( res.server, sp[1], [match.index + sp[0].length + 1, match.index + sp[0].length + sp[1].length] )
 				eatSet.push( match )
 			}
 			this._eatTxt(eatSet);
@@ -274,6 +273,12 @@
 			return res;
 		}
 	}
+
+	// FOR STORAGE
+	JSSU.entryIterator = function*(schema, iterate){
+
+	}
+
 
 	// TODO: Add methods for non-nodejs environment
 	JSSU.Buffer = function(){
