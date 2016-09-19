@@ -14,8 +14,12 @@
 	}
 }(this, function(root, JSSConst){
 	JSSConst = JSSConst || {};
+
 	// TODO: Add method for non-nodejs environment
+	JSSConst.Config = JSON.parse( require("fs").readFileSync("./config.json") );
+	
 	JSSConst.SpecialChars = [['&aacute;','a'], ['&agrave;','a'], ['&amp;','&'], ['&atilde;','a'], ['&blank;',' '], ['&bull;','•'], ['&ccedil;','c'], ['&cent;','c'], ['&cir;','○'], ['&eacute;','e'], ['&egrave;','e'], ['&ge;','≥'], ['&gt;','>'], ['&hyph;','-'], ['&iacute;','i'], ['&lt;','<'], ['&mu;','u'], ['&ntilde;','n'], ['&oacute;','o'], ['&ocirc;','o'], ['&para;','¶'], ['&racute;','r'], ['&reg;','®'], ['&rsquo;','\''], ['&sect;','§'], ['&times;','×'], ['&uuml;','u']],
+	
 	JSSConst.RE = {
 		URL: {
 			general: /([a-z0-9]+\:\/\/)?[\w\-]+(\.[\w\-]+)+(\/?(([\w\-])+\/?)*(\.[\w\-]+!\/)?)?(\?[\w\-=&+;]+)?(#[\w\-=&+;]+)?/gi,
@@ -33,6 +37,21 @@
 		Date: /((\w{3}\.?|\w{4,})[\,\s-]{0,2}\d{1,2}(\s?(st|nd|th))?[\,\s-]{1,2}(\d{4}|'\d{2}))|(('?\d{1,2}|\d{4})[\,\s\/-]\d{1,2}[\,\s\/-](\d{4}|'?\d{1,2}))/ig,
 		Hyphenated: /[a-z0-9]+-[a-z0-9]+/ig,
 		GeneralWord: /([a-z\$][a-z0-9\$]*)|([a-z0-9\$]*[a-z])/ig
+	}
+
+
+	// Add utility method directly to JS Objects
+	Object.prototype.getIterator = function*(){
+		for(var property in this) {
+			if( this.hasOwnProperty(property) ) {
+				yield property;
+			}
+		}
+	}
+	String.prototype.fixLength = function(len){
+		var blank = ""
+		for( var i=0; i<len;i++ ){ blank += " " }
+		return ( blank + this ).substring( this.length );
 	}
 
 }))

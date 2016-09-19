@@ -33,6 +33,23 @@
 			if( typeof this._cache.token === 'undefined' )
 				this._cache.token = JSSU.tokenize(this.text, this.config.tokenType)
 			return this._cache.token;
+		},
+		getFlatIterator: function*(obj, type){
+			obj = obj || this.token;
+			type = type || "null"
+			for( let item of obj.getIterator() ){
+				if( obj[item] instanceof Array ){
+					yield {
+						type: type,
+						term: item,
+						post: obj[item]
+					}
+				}
+				else{
+					yield* this.getFlatIterator( obj[item], item );
+				}
+			}
+
 		}
 	}
 	Object.defineProperties(JSSU.String.prototype, {
@@ -79,11 +96,8 @@
 			default:
 				tokens = (new JSSU.DefaultTokenizer(txt)).run();
 		}
-		log( tokens )
-		// tokens = txt.split(/[\s|!\W]+/);
 		return tokens;
 	}
-
 	JSSU.DefaultTokenizer = function(txt){
 		this.txt = txt.replace(/[\n\r|\n|\n\r]+/g, " ").toLowerCase();
 		this.tokens = { word: {}, rule: {}, terms: {} };
@@ -118,7 +132,7 @@
 		},
 		_eatTxt: function(eatSet){
 			//this.txt = this.txt.substr(0, start) + this.txt.substr( start + leng - 1 );
-			this.txt = eatSet.getRemain(this.txt);
+			//this.txt = eatSet.getRemain(this.txt);
 		},
 		run: function(){
 			// run all type identifiers in proper sequence
@@ -227,7 +241,7 @@
 				dat = match[0];
 				(/\d\s?(st|nd|th)/).test(dat) && ( dat = dat.replace(/(st|nd|th)/, "") );
 				if( !isNaN(Date.parse(dat)) ){
-					this._addPosition( res, new Date(dat), [match.index, match.index + dat.length - 1] )
+					this._addPosition( res, (new Date(dat)).toISOString(), [match.index, match.index + dat.length - 1] )
 					eatSet.push( match )
 				}
 			}
@@ -258,11 +272,25 @@
 				res.push({word: match[0], pos: [match.index, match.index + match[0].length -1 ]})
 			}
 			return res;
-
-			
 		}
+	}
+
+	// TODO: Add methods for non-nodejs environment
+	JSSU.Buffer = function(){
 
 	}
+
+	// Singleton, universal buffer manager
+	// handling the memory constraint
+	JSSU.BufferPoolManager = function(){
+
+	}
+
+	// Class for every document handler to create an instance
+	JSSU.BufferManager = function(){
+
+	}
+
 
 	 return JSSU;
 }))
