@@ -2,28 +2,23 @@
 	if (typeof define === 'function' && define.amd) {
 		// for require js
 		define(['exports', 'JSSConst'], function(exports, JSSConst) {
-			root.JSSU = factory(root, JSSConst, exports);
+			root.JSSU = factory(root, JSSConst, null, exports);
 		});
 	} else if (typeof exports !== 'undefined') {
 		// for node js environment
 		var JSSConst = require("./constants.js");
-		factory(root, JSSConst, exports);
+		factory(root, JSSConst, require("fs"), module.exports);
 	} else {
 		// for browser
-		root.JSSU = factory(root, root.JSSConst,{});
+		root.JSSU = factory(root, root.JSSConst, null,{});
 	}
-}(this, function(root, JSSConst, JSSU){
+}(this, function(root, JSSConst, fs, JSSU){
 	JSSU = JSSU || {};
+
+	JSSU.Const = JSSConst;
 
 	// for debug
 	var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
-
-	// define JS utility methods
-	Array.prototype.dense = function(){
-		var l = [];
-		for( i=0; i<this.length; i++ ){ typeof this[i] === 'undefined' && l.push(this[i]) }
-		return l;
-	}
 
 	JSSU.String = function(txt, config){
 		this.config = config || {};
