@@ -17,6 +17,7 @@
 
 	// TODO: Add method for non-nodejs environment
 	JSSConst.Config = JSON.parse( require("fs").readFileSync("./config.json") );
+	JSSConst.GetConfig = (key) => JSSConst.Config[key];
 	
 	JSSConst.SpecialChars = [['&aacute;','a'], ['&agrave;','a'], ['&amp;','&'], ['&atilde;','a'], ['&blank;',' '], ['&bull;','•'], ['&ccedil;','c'], ['&cent;','c'], ['&cir;','○'], ['&eacute;','e'], ['&egrave;','e'], ['&ge;','≥'], ['&gt;','>'], ['&hyph;','-'], ['&iacute;','i'], ['&lt;','<'], ['&mu;','u'], ['&ntilde;','n'], ['&oacute;','o'], ['&ocirc;','o'], ['&para;','¶'], ['&racute;','r'], ['&reg;','®'], ['&rsquo;','\''], ['&sect;','§'], ['&times;','×'], ['&uuml;','u']],
 	
@@ -37,6 +38,22 @@
 		Date: /((\w{3}\.?|\w{4,})[\,\s-]{0,2}\d{1,2}(\s?(st|nd|th))?[\,\s-]{1,2}(\d{4}|'\d{2}))|(('?\d{1,2}|\d{4})[\,\s\/-]\d{1,2}[\,\s\/-](\d{4}|'?\d{1,2}))/ig,
 		Hyphenated: /[a-z0-9]+-[a-z0-9]+/ig,
 		GeneralWord: /([a-z\$][a-z0-9\$]*)|([a-z0-9\$]*[a-z])/ig
+	}
+
+	JSSConst.IndexSchema = {
+		Position: [
+			{ Name: "DocumentId", length: 16 },
+			{ Name: "Type", length: 10 },
+			{ Name: "Term", length: 32 },
+			{ Name: "Count", length: 4 },
+			{ Name: "PositionPointer", length: 12 }
+		],
+		NoPositioni: [
+			{ Name: "DocumentId", length: 16 },
+			{ Name: "Type", length: 10 },
+			{ Name: "Term", length: 32 },
+			{ Name: "Count", length: 4 }
+		]
 	}
 
 

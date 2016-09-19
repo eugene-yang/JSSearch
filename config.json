@@ -1,4 +1,5 @@
 {
 	"memory_limit": -1,
-	"temp_directory": "./tmp/"
+	"temp_directory": "./tmp/",
+	"index_output_filename": "index"
 }

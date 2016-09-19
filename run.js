@@ -23,7 +23,7 @@ var fn = "fr940104.2";
 			var no = $(this).find('DOCNO').text().replace(" ", ""),
 				text = new JSSU.String( $(this).find('TEXT').text() );
 			//log( text.token );
-			log( [...text.getFlatIterator()] );
+			//log( [...text.getFlatIterator()] );
 		})
 	} )
 //})

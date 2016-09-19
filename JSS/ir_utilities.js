@@ -1,18 +1,18 @@
 (function(root, factory){
 	if (typeof define === 'function' && define.amd) {
 		// for require js
-		define(['exports', 'JSSConst'], function(exports, JSSConst) {
-			root.JSSU = factory(root, JSSConst, null, exports);
+		define(['exports', 'JSSConst', "md5"], function(exports, JSSConst, md5) {
+			root.JSSU = factory(root, JSSConst, null, md5, exports);
 		});
 	} else if (typeof exports !== 'undefined') {
 		// for node js environment
 		var JSSConst = require("./constants.js");
-		factory(root, JSSConst, require("fs"), module.exports);
+		factory(root, JSSConst, require("fs"), requrie("md5"), module.exports);
 	} else {
 		// for browser
-		root.JSSU = factory(root, root.JSSConst, null,{});
+		root.JSSU = factory(root, root.JSSConst, null, root.md5, {});
 	}
-}(this, function(root, JSSConst, fs, JSSU){
+}(this, function(root, JSSConst, fs, md5, JSSU){
 	JSSU = JSSU || {};
 
 	JSSU.Const = JSSConst;
@@ -20,13 +20,52 @@
 	// for debug
 	var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
+	// create global buffer manager instance for posting file
+	var PostingListBufferManager = new JSSU.bufferManager({
+		id: JSSConst.GetConfig("index_output_filename"),
+		schema: null,
+		type: "varchar",
+		ext: "posting"
+	})
+
+	JSSU.Document = function(id, string, config){
+		// private
+		this.getId = () => id;
+
+		// public
+		this.config = config || {};
+		this.String = new JSSU.String( string );
+		this.bufferManager = new JSSU.bufferManager(id, 
+			!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
+	}
+	JSSU.Document.prototype = {
+		createIndex: function(){
+			for( let item of this.String.getFlatIterator() ){
+				// write posting list
+				
+				// write entry
+				this.bufferManager.push({
+					"DocumentId": this.Id,
+					"Type": item.type,
+					"Term": item.term.length > 32 ? md5(item.term) : item.term,
+					"Count": item.post.length,
+					"PositionPointer": item.post
+				})
+			}
+		}
+	}
+	Object.defineProperties(JSSU.Document.prototype, {
+		Id: { get: function(){return this.getId();} }
+	});
+
+
 	JSSU.String = function(txt, config){
+		// private
+		this.getRawText = () => txt;
+
+		// public
 		this.config = config || {};
 		this._cache = {};
-
-		// true private
-		var _text = txt;
-		this.getRawText = function(){ return _text; }
 	}
 	JSSU.String.prototype = {
 		tokenize: function(){
@@ -292,8 +331,27 @@
 	}
 
 	// Class for every document handler to create an instance
-	JSSU.BufferManager = function(){
+	// type: ("fixed", "varchar") default "fixed"
+	// ext: file extension, default .tmp
+	JSSU.BufferManager = function(id, schema, type, ext){
+		if( typeof(id) == "object" ){
+			schema = id.schmea, type = id.type, ext = id.ext;
+			id = id.id;
+		}
 
+		// register this instance to BufferPoolManager
+		// ...
+		// initualize and open file pointer
+		// ...
+	}
+	JSSU.BufferManager.prototype = {
+		// fixed schema
+		push: function(){},
+		get: function(ind){},
+
+		// varchar
+		write: function(){},
+		fetch: function(offset){}
 	}
 
 
