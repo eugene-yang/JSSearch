@@ -263,7 +263,9 @@
 					"PositionPointer": postPointer
 				})
 			}
-			this.bufferManager.done();
+		},
+		flushAll: function(){
+			this.bufferManager.flushAll();
 		}
 	}
 	Object.defineProperties(JSSU.Document.prototype, {
