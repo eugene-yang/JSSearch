@@ -23,10 +23,10 @@
 	
 	JSSConst.RE = {
 		URL: {
-			general: /([a-z0-9]+\:\/\/)?[\w\-]+(\.[\w\-]+)+(\/?(([\w\-])+\/?)*(\.[\w\-]+!\/)?)?(\?[\w\-=&+;]+)?(#[\w\-=&+;]+)?/gi,
-			//             protocol         domain               dir          file_ext         get-param         hashtag
+			general: /([a-z0-9]+\:\/\/)?[a-z0-9\-]{1,63}(\.[a-z0-9\-]{1,63})*(\.[a-z0-9\-]{2,63})(\/?(([\w\-])+\/?)*(\.[\w\-]+!\/)?)?(\?[\w\-=&+;]+)?(#[\w\-=&+;]+)?/gi,
+			//             protocol                                 domain                                   dir          file_ext         get-param         hashtag
 			Protocol: /([a-z0-9]+\:\/\/)/ig,
-			Server: /[\w\-]+(\.[\w\-]+)+/ig,
+			Server: /[a-z0-9\-]{1,63}(\.[a-z0-9\-]{1,63})*(\.[a-z0-9\-]{2,63})/ig,
 		},
 		IP: {
 			v4: /(\d{1,3}\.){3}\d{1,3}/g,
