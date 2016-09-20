@@ -1,7 +1,6 @@
 var fs = require('fs'),
 	cheerio = require('cheerio'),
-	JSSU = require('./JSS/ir_utilities.js'),
-	execTimer = require("execTimer");
+	JSSU = require('./JSS/ir_utilities.js');
 
 var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
