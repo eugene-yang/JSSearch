@@ -41,7 +41,53 @@
 		fire: function(event, arg){
 			if( !!this.__event__stack__[event] ){
 				for( let handler of this.__event__stack__[event] ){
-					!!handler && handler(arg);
+					!!handler && handler.call(this, arg);
+				}
+			}
+		}
+	}
+
+	// Singleton, universal buffer manager
+	// handling the memory constraint by round robin
+	JSSU.BufferPoolManager = {
+		maxMemoryEntry: JSSConst.GetConfig("memory_limit") == -1 ? Infinity : JSSConst.GetConfig("index_output_filename"),
+		flushBunch: JSSConst.GetConfig("default_flush_bunch") || 100,
+		bufferManagerList: [],
+		entryCount: 0,
+		addManager: function(managerInstance){
+			this.bufferManagerList.push(managerInstance);
+			var pool = this, 
+				ind = this.bufferManagerList.length - 1;
+			managerInstance.on("flush", function(num){
+				pool.decrement(ind, num);
+			});
+			managerInstance.on("push", function(){
+				pool.increment(ind, 1);
+			})
+			return ind;
+		},
+		removeManger: function(managerIndex){
+			delete this.bufferManagerList[ managerIndex ];
+		},
+		increment: function(managerIndex, num){
+			// if over limit, then ask first buffer manager to flush some slots
+			this.entryCount += num;
+			if( this.entryCount > this.maxMemoryEntry )
+				this.askFlush();
+		},
+		decrement: function(managerIndex, num){
+			this.entryCount -= num;
+		},
+		askFlush: function(){
+			var remainFlushRequest = this.flushBunch;
+			for( let manager of this.bufferManagerList ){
+				if( manager.lengthInMemory > 0 && manager.lengthInMemory < remainFlushRequest ){
+					remainFlushRequest -= manager.lengthInMemory;
+					manager.flushAll();
+				}
+				else if( manager.lengthInMemory >= remainFlushRequest ){
+					manager.flush( remainFlushRequest );
+					break;
 				}
 			}
 		}
@@ -49,46 +95,85 @@
 
 	// Class for every document handler to create an instance
 	// type: ("fixed", "varchar") default "fixed"
-	// ext: file extension, default .tmp
+	// ext: file extension, default tmp
 	JSSU.BufferManager = function(id, schema, type, ext){
 		JSSU.Eventable.call(this);
 
 		if( typeof(id) == "object" ){
-			schema = id.schmea, type = id.type, ext = id.ext;
+			schema = id.schema, type = id.type, ext = id.ext;
 			id = id.id;
 		}
+		ext = ext || "tmp";
+
+		this.schema = new JSSU.Schema( schema );
+
+		this.bufferList = [];
 
 		this.inMemoryFirstIndex = 0;
-		this.nextIndex = 0;
 
 		// register this instance to BufferPoolManager
-		// ...
+		this.managerIndex = JSSU.BufferPoolManager.addManager( this );
 		// initialize and open file pointer
-		// ...
+		this.fnd = ((ext == "tmp") ? JSSConst.GetConfig("temp_directory") : "") + id + "." + ext;
+		// DEBUG
+		log( this.fnd );
+		this.writeStream = fs.createWriteStream( this.fnd );
 	}
 	JSSU.BufferManager.prototype = {
 		destruct: function(){
 			this.flushAll();
+			this.writeStream.end();
 		},
 
 		// for memory operation
-		flush: function(num){},
-		flushAll: function(){},
+		__write: function(str){
+			this.writeStream.write(str);
+		},
+		flush: function(num){
+			for( ;num>0; num-- ){
+				this._write( this.bufferList.shift() );
+			}
+			this.fire("flush", num);
+		},
+		flushAll: function(){
+			this.flush(this.lengthInMemory);
+		},
 
 		// fixed schema
-		push: function(){},
+		push: function(obj){
+			this.bufferList.push( this.schema.create(obj) );
+			this.fire("push");
+		},
 		get: function(ind){},
 
 		// varchar
-		write: function(){},
+		write: function(str){
+
+		},
 		fetch: function(offset){}
 	}
 	JSSU.BufferManager.extend( JSSU.Eventable );
 	Object.defineProperties(JSSU.BufferManager.prototype, {
-		length: { get: function(){ return this.nextIndex; } },
-		lengthInMemory: { get: function(){ return this.nextIndex - this.inMemoryFirstIndex; } }
+		length: { get: function(){ return this.bufferList.length + this.inMemoryFirstIndex; } },
+		lengthInMemory: { get: function(){ return this.bufferList.length; } }
 	})
 
+	JSSU.Schema = function(schema){
+		this.schema = schema;
+	}
+	JSSU.Schema.prototype = {
+		read: function(string){},
+		create: function(obj){
+			var str = "";
+			for( let col of this.schema ){
+				str += ("" + ( obj[col.name] || "" )).fixLength( col.length );
+			}
+			return str;
+		} 
+	}
+
+
+	//------------------------------------------------------------------
 
 	// create global buffer manager instance for posting file
 	var PostingListBufferManager = new JSSU.BufferManager({
@@ -149,8 +234,9 @@
 			for( let item of obj.getIterator() ){
 				if( obj[item] instanceof Array ){
 					yield {
-						type: type,
-						term: item,
+						Type: type,
+						Term: item,
+						Count: obj[item].length,
 						post: obj[item]
 					}
 				}
@@ -390,23 +476,7 @@
 
 	}
 
-	// Singleton, universal buffer manager
-	// handling the memory constraint by round robin
-	JSSU.BufferPoolManager = {
-		maxMemoryEntry: JSSConst.GetConfig("memory_limit") == -1 ? Infinity : JSSConst.GetConfig("index_output_filename"),
-		bufferManagerList: [],
-		bufferCount: 0,
-		addManager: function(managerInstance){
 
-			// return index
-		},
-		increment: function(managerIndex){
-			// if over limit, then ask first buffer
-		},
-		decrement: function(managerIndex, num){
-			// 
-		}
-	}
 
 
 

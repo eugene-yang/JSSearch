@@ -1,5 +1,6 @@
 {
-	"memory_limit": -1,
+	"memory_limit": 1,
+	"default_flush_bunch": 100,
 	"temp_directory": "./tmp/",
 	"index_output_filename": "index"
 }

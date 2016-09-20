@@ -42,17 +42,17 @@
 
 	JSSConst.IndexSchema = {
 		Position: [
-			{ Name: "DocumentId", length: 16 },
-			{ Name: "Type", length: 10 },
-			{ Name: "Term", length: 32 },
-			{ Name: "Count", length: 4 },
-			{ Name: "PositionPointer", length: 12 }
+			{ name: "DocumentId", length: 16, type: "string" },
+			{ name: "Type", length: 10, type: "string" },
+			{ name: "Term", length: 32, type: "string" },
+			{ name: "Count", length: 4, type: "number" },
+			{ name: "PositionPointer", length: 12, type: "number" }
 		],
-		NoPositioni: [
-			{ Name: "DocumentId", length: 16 },
-			{ Name: "Type", length: 10 },
-			{ Name: "Term", length: 32 },
-			{ Name: "Count", length: 4 }
+		NoPosition: [
+			{ name: "DocumentId", length: 16, type: "string" },
+			{ name: "Type", length: 10, type: "string" },
+			{ name: "Term", length: 32, type: "string" },
+			{ name: "Count", length: 4, type: "number" }
 		]
 	}
 	JSSConst.VarCharSeparator = "\u001d"; // ASCII code group separator  

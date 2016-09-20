@@ -13,6 +13,17 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 // var text = new JSSU.String("@include<haha>")
 // log( [...text.getFlatIterator()] );
 
-var t = new JSSU.BufferManager()
-t.on("flush", function(t){console.log(t)})
-t.fire("flush", 123);
+
+// var fs = require("fs");
+// fw = fs.createWriteStream("./test.tmp");
+// fw.write("aaa");
+// fw.write("bbb");
+// fw.end();
+ 
+var sch = new JSSU.Schema( JSSU.Const.IndexSchema.NoPosition );
+console.log( sch.create({
+	DocumentId: "haha-123",
+	Type: "word",
+	Term: "good",
+	Count: 12
+}) )
