@@ -18,7 +18,7 @@
 	JSSU.Const = JSSConst;
 
 	// for debug
-	var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
+	var log = obj => console.log(JSON.stringify(obj, null, 2))
 
 	// Basic Event Object
 	JSSU.Eventable = function(){
@@ -77,6 +77,7 @@
 		},
 		decrement: function(managerIndex, num){
 			this.entryCount -= num;
+			log( "flush " + num + " remain " + this.entryCount);
 		},
 		askFlush: function(){
 			var remainFlushRequest = this.flushBunch;
@@ -140,12 +141,12 @@
 		},
 
 		// for memory operation
-		_write: function(str){
-			this.writeStream.write(str);
+		_write: function(str, callback){
+			this.writeStream.write(str, "utf-8", callback);
 		},
 		flush: function(num){
 			if( this.type == "fixed" ){
-				for( ;num>0; num-- ){
+				for( var i = 0; i<num; i++ ){
 					this._write( this.bufferList.shift() );
 					this.inMemoryFirstIndex++;
 				}
