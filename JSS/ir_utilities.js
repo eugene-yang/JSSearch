@@ -50,7 +50,7 @@
 	// Singleton, universal buffer manager
 	// handling the memory constraint by round robin
 	JSSU.BufferPoolManager = {
-		maxMemoryEntry: JSSConst.GetConfig("memory_limit") == -1 ? Infinity : JSSConst.GetConfig("index_output_filename"),
+		maxMemoryEntry: JSSConst.GetConfig("memory_limit") == -1 ? Infinity : JSSConst.GetConfig("memory_limit"),
 		flushBunch: JSSConst.GetConfig("default_flush_bunch") || 100,
 		bufferManagerList: [],
 		entryCount: 0,
@@ -104,34 +104,56 @@
 			id = id.id;
 		}
 		ext = ext || "tmp";
+		this.type = type || "fixed";
 
-		this.schema = new JSSU.Schema( schema );
+		// for fixed schema
+		if( this.type == "fixed" ){
+			this.schema = new JSSU.Schema( schema );
+			this.bufferList = [];
+			this.inMemoryFirstIndex = 0;
+		}
 
-		this.bufferList = [];
-
-		this.inMemoryFirstIndex = 0;
+		// for varchar
+		if( this.type == "varchar" ){
+			this.autoFlush = true; // for now
+			this.inMemoryOffset = 0;
+			this.inMemoryString = "";
+			this.separator = JSSConst.VarCharSeparator;
+		}
 
 		// register this instance to BufferPoolManager
-		this.managerIndex = JSSU.BufferPoolManager.addManager( this );
+		// TODO: only track fixed buffer manger at this time
+		if( this.type == "fixed" )
+			this.managerIndex = JSSU.BufferPoolManager.addManager( this );
 		// initialize and open file pointer
 		this.fnd = ((ext == "tmp") ? JSSConst.GetConfig("temp_directory") : "") + id + "." + ext;
 		// DEBUG
-		log( this.fnd );
 		this.writeStream = fs.createWriteStream( this.fnd );
 	}
 	JSSU.BufferManager.prototype = {
+		done: function(){
+			this.writeStream.end();
+		},
 		destruct: function(){
 			this.flushAll();
-			this.writeStream.end();
+			this.done();
 		},
 
 		// for memory operation
-		__write: function(str){
+		_write: function(str){
 			this.writeStream.write(str);
 		},
 		flush: function(num){
-			for( ;num>0; num-- ){
-				this._write( this.bufferList.shift() );
+			if( this.type == "fixed" ){
+				for( ;num>0; num-- ){
+					this._write( this.bufferList.shift() );
+					this.inMemoryFirstIndex++;
+				}
+			}
+			if( this.type == "varchar" ){
+				this._write( this.inMemoryString.substring(0, num) );
+				this.inMemoryString = this.inMemoryString.slice(num);
+				this.inMemoryOffset += num;
 			}
 			this.fire("flush", num);
 		},
@@ -141,21 +163,43 @@
 
 		// fixed schema
 		push: function(obj){
+			if( this.type != "fixed" ) 
+				throw new TypeError("Called push when BufferManager is not set as fixed")
+
 			this.bufferList.push( this.schema.create(obj) );
 			this.fire("push");
+			return this.length - 1;
 		},
 		get: function(ind){},
 
 		// varchar
 		write: function(str){
+			if( this.type != "varchar" ) 
+				throw new TypeError("Called write when BufferManager is not set as varchar")
 
+			// TODO: implement case when not auto flushing
+			this.inMemoryString += ( str + this.separator );
+			if( !!this.autoFlush )
+				this.flushAll();
+
+			return this.length - str.length;
 		},
 		fetch: function(offset){}
 	}
 	JSSU.BufferManager.extend( JSSU.Eventable );
 	Object.defineProperties(JSSU.BufferManager.prototype, {
-		length: { get: function(){ return this.bufferList.length + this.inMemoryFirstIndex; } },
-		lengthInMemory: { get: function(){ return this.bufferList.length; } }
+		length: { get: function(){ 
+			if( this.type == "fixed" )
+				return this.bufferList.length + this.inMemoryFirstIndex; 
+			if( this.type == "varchar" )
+				return this.inMemoryString.length + this.inMemoryOffset;
+		} },
+		lengthInMemory: { get: function(){
+			if( this.type == "fixed" )
+				return this.bufferList.length;
+			if( this.type == "varchar" )
+				return this.inMemoryString.length; 
+		} },
 	})
 
 	JSSU.Schema = function(schema){
@@ -182,31 +226,44 @@
 		type: "varchar",
 		ext: "posting"
 	})
+	PostingListBufferManager.createString = function(postingList){
+		return postingList.join(",");
+	}
 
 	JSSU.Document = function(id, string, config){
-		// private
+		if( typeof(id) === "object" ){
+			var string = id.string,
+				config = id.config,
+				id = id.id;
+		}
+
+		// read-only
 		this.getId = () => id;
 
 		// public
 		this.config = config || {};
+		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("default_index_with_position");
+
 		this.String = new JSSU.String( string );
-		this.bufferManager = new JSSU.bufferManager(id, 
+		this.bufferManager = new JSSU.BufferManager(id, 
 			!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
 	}
 	JSSU.Document.prototype = {
 		createIndex: function(){
 			for( let item of this.String.getFlatIterator() ){
 				// write posting list
-				
+				if( this.config.tokenPosition )
+					var postPointer = PostingListBufferManager.write( PostingListBufferManager.createString(item.post) )
 				// write entry
 				this.bufferManager.push({
 					"DocumentId": this.Id,
 					"Type": item.type,
 					"Term": item.term.length > 32 ? md5(item.term) : item.term,
 					"Count": item.post.length,
-					"PositionPointer": item.post
+					"PositionPointer": postPointer
 				})
 			}
+			this.bufferManager.done();
 		}
 	}
 	Object.defineProperties(JSSU.Document.prototype, {
@@ -215,7 +272,7 @@
 
 
 	JSSU.String = function(txt, config){
-		// private
+		// read-only
 		this.getRawText = () => txt;
 
 		// public
@@ -234,9 +291,8 @@
 			for( let item of obj.getIterator() ){
 				if( obj[item] instanceof Array ){
 					yield {
-						Type: type,
-						Term: item,
-						Count: obj[item].length,
+						type: type,
+						term: item,
 						post: obj[item]
 					}
 				}

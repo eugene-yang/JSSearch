@@ -19,11 +19,17 @@ var fn = "fr940104.2";
 
 		var $ = cheerio.load(data);
 
-		$('DOC').eq(0).each(function(){
-			var no = $(this).find('DOCNO').text().replace(" ", ""),
-				text = new JSSU.String( $(this).find('TEXT').text() );
+		$('DOC').each(function(){
+			var Doc = new JSSU.Document({
+				id: $(this).find('DOCNO').text().replace(/\s/g, ""),
+				string: $(this).find('TEXT').text()
+			})
+			Doc.createIndex();
+
+			// var no = $(this).find('DOCNO').text().replace(" ", ""),
+			// 	text = new JSSU.String( $(this).find('TEXT').text() );
 			//log( text.token );
-			//log( [...text.getFlatIterator()] );
+			// log( [...text.getFlatIterator()] );
 		})
 	} )
 //})
