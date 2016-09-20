@@ -55,6 +55,7 @@
 			{ Name: "Count", length: 4 }
 		]
 	}
+	JSSConst.VarCharSeparator = "\u001d"; // ASCII code group separator  
 
 
 	// Add utility method directly to JS Objects
@@ -69,6 +70,18 @@
 		var blank = ""
 		for( var i=0; i<len;i++ ){ blank += " " }
 		return ( blank + this ).substring( this.length );
+	}
+	Object.prototype.extend = function(sup){
+		this.__super = sup;
+		var proto = {}
+		for( let prop of sup.prototype.getIterator() ){
+			proto[ prop ] = sup.prototype[ prop ];
+		}
+		for( let prop of this.prototype.getIterator() ){
+			proto[ prop ] = this.prototype[ prop ];
+		}
+		this.prototype = proto;
+		this.constructor = this;
 	}
 
 }))

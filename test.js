@@ -9,6 +9,10 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 // var text = new JSSU.String("10/12/1992   10-10-2016   November 25 '99   Jan-10-1992   Apr-44-5555  10-12-'16  October 12 th 1992");
 // var text = new JSSU.String("I-20 i-20 Alpha-GO CDC-50 1-hour asdklfj ewkrjkrq;lkda hahaha")
 // var text = new JSSU.String("haha.txt 100.00 live.m3u8")
-var text = new JSSU.String("haha.txt contains the information downloaded from livestream.com, which is sent to me from john.smith@aaa.bc.tw. It's about a 24-hour streaming video(started from 8/1/2016) link that can only be open on VLC. The stream info is in the file live.m3u8! This worth NTD$500.50!!!")
+// var text = new JSSU.String("haha.txt contains the information downloaded from livestream.com, which is sent to me from john.smith@aaa.bc.tw. It's about a 24-hour streaming video(started from 8/1/2016) link that can only be open on VLC. The stream info is in the file live.m3u8! This worth NTD$500.50!!!")
 // var text = new JSSU.String("@include<haha>")
-log( [...text.getFlatIterator()] );
+// log( [...text.getFlatIterator()] );
+
+var t = new JSSU.BufferManager()
+t.on("flush", function(t){console.log(t)})
+t.fire("flush", 123);

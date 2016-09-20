@@ -7,7 +7,7 @@
 	} else if (typeof exports !== 'undefined') {
 		// for node js environment
 		var JSSConst = require("./constants.js");
-		factory(root, JSSConst, require("fs"), requrie("md5"), module.exports);
+		factory(root, JSSConst, require("fs"), require("md5"), module.exports);
 	} else {
 		// for browser
 		root.JSSU = factory(root, root.JSSConst, null, root.md5, {});
@@ -20,8 +20,78 @@
 	// for debug
 	var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
+	// Basic Event Object
+	JSSU.Eventable = function(){
+		this.__event__stack__ = {};
+	}
+	JSSU.Eventable.prototype = {
+		on: function(event, callback){
+			this.__event__stack__[event] = this.__event__stack__[event] || [];
+			this.__event__stack__[event].push( callback );
+			return this.__event__stack__[event].length - 1;
+		},
+		off: function(event, key){
+			if( !!key ) delete this.__event__stack__[event];
+			else {
+				for( var i=0; i<this.__event__stack__[event].length; i++ ){
+					if( this.__event__stack__[event][i] === key ) delete this.__event__stack__[event][i];
+				}
+			}
+		},
+		fire: function(event, arg){
+			if( !!this.__event__stack__[event] ){
+				for( let handler of this.__event__stack__[event] ){
+					!!handler && handler(arg);
+				}
+			}
+		}
+	}
+
+	// Class for every document handler to create an instance
+	// type: ("fixed", "varchar") default "fixed"
+	// ext: file extension, default .tmp
+	JSSU.BufferManager = function(id, schema, type, ext){
+		JSSU.Eventable.call(this);
+
+		if( typeof(id) == "object" ){
+			schema = id.schmea, type = id.type, ext = id.ext;
+			id = id.id;
+		}
+
+		this.inMemoryFirstIndex = 0;
+		this.nextIndex = 0;
+
+		// register this instance to BufferPoolManager
+		// ...
+		// initialize and open file pointer
+		// ...
+	}
+	JSSU.BufferManager.prototype = {
+		destruct: function(){
+			this.flushAll();
+		},
+
+		// for memory operation
+		flush: function(num){},
+		flushAll: function(){},
+
+		// fixed schema
+		push: function(){},
+		get: function(ind){},
+
+		// varchar
+		write: function(){},
+		fetch: function(offset){}
+	}
+	JSSU.BufferManager.extend( JSSU.Eventable );
+	Object.defineProperties(JSSU.BufferManager.prototype, {
+		length: { get: function(){ return this.nextIndex; } },
+		lengthInMemory: { get: function(){ return this.nextIndex - this.inMemoryFirstIndex; } }
+	})
+
+
 	// create global buffer manager instance for posting file
-	var PostingListBufferManager = new JSSU.bufferManager({
+	var PostingListBufferManager = new JSSU.BufferManager({
 		id: JSSConst.GetConfig("index_output_filename"),
 		schema: null,
 		type: "varchar",
@@ -313,10 +383,6 @@
 		}
 	}
 
-	// FOR STORAGE
-	JSSU.entryIterator = function*(schema, iterate){
-
-	}
 
 
 	// TODO: Add methods for non-nodejs environment
@@ -325,34 +391,26 @@
 	}
 
 	// Singleton, universal buffer manager
-	// handling the memory constraint
-	JSSU.BufferPoolManager = function(){
+	// handling the memory constraint by round robin
+	JSSU.BufferPoolManager = {
+		maxMemoryEntry: JSSConst.GetConfig("memory_limit") == -1 ? Infinity : JSSConst.GetConfig("index_output_filename"),
+		bufferManagerList: [],
+		bufferCount: 0,
+		addManager: function(managerInstance){
 
-	}
-
-	// Class for every document handler to create an instance
-	// type: ("fixed", "varchar") default "fixed"
-	// ext: file extension, default .tmp
-	JSSU.BufferManager = function(id, schema, type, ext){
-		if( typeof(id) == "object" ){
-			schema = id.schmea, type = id.type, ext = id.ext;
-			id = id.id;
+			// return index
+		},
+		increment: function(managerIndex){
+			// if over limit, then ask first buffer
+		},
+		decrement: function(managerIndex, num){
+			// 
 		}
-
-		// register this instance to BufferPoolManager
-		// ...
-		// initualize and open file pointer
-		// ...
 	}
-	JSSU.BufferManager.prototype = {
-		// fixed schema
-		push: function(){},
-		get: function(ind){},
 
-		// varchar
-		write: function(){},
-		fetch: function(offset){}
-	}
+
+
+
 
 
 	 return JSSU;
