@@ -1,4 +1,3 @@
 _data/
 *.sublime-workspace
 node_modules/
-_tmp/
