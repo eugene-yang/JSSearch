@@ -9,7 +9,9 @@ var fileDir = "_data/BigSample/";
 var executFlag = 0;
 console.time("Runtime");
 
-fs.readdirSync(fileDir).forEach(function(fn){
+var fn = "fr940104.0";
+
+// fs.readdirSync(fileDir).forEach(function(fn){
 	executFlag++;
 	fs.readFile( fileDir + fn, 'utf8', function(err,data){
 
@@ -23,13 +25,15 @@ fs.readdirSync(fileDir).forEach(function(fn){
 
 		var $ = cheerio.load(data);
 
-		$('DOC').each(function(){
+		$('DOC').eq(0).each(function(){
 
 			var Doc = new JSSU.Document({
 				id: $(this).find('DOCNO').text().replace(/\s/g, ""),
 				string: $(this).find('TEXT').text()
 			})
 			Doc.createIndex();
+
+			log( Doc.bufferManager.get(0) );
 
 			// var no = $(this).find('DOCNO').text().replace(" ", ""),
 			// 	text = new JSSU.String( $(this).find('TEXT').text() );
@@ -41,7 +45,7 @@ fs.readdirSync(fileDir).forEach(function(fn){
 
 		if( --executFlag === 0 ) done()
 	} )
-})
+// })
 
 
 function done(){

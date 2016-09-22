@@ -52,6 +52,7 @@
 	JSSU.BufferPoolManager = {
 		maxMemoryEntry: JSSConst.GetConfig("memory_limit") == -1 ? Infinity : JSSConst.GetConfig("memory_limit"),
 		flushBunch: JSSConst.GetConfig("default_flush_bunch") || 100,
+		flushPointer: 0, // perform round-robin
 		bufferManagerList: [],
 		entryCount: 0,
 		addManager: function(managerInstance){
@@ -63,6 +64,9 @@
 			});
 			managerInstance.on("push", function(){
 				pool.increment(ind, 1);
+			})
+			managerInstance.on("read", function(num){
+				pool.increment(ind, num);
 			})
 			return ind;
 		},
@@ -79,9 +83,12 @@
 			this.entryCount -= num;
 			log( "flush " + num + " remain " + this.entryCount);
 		},
-		askFlush: function(){
-			var remainFlushRequest = this.flushBunch;
-			for( let manager of this.bufferManagerList ){
+		askFlush: function(num){
+			var remainFlushRequest = Math.max(num||0, this.flushBunch);
+			while( this.entryCount > this.maxMemoryEntry ){
+				var manager = this.bufferManagerList[ this.flushPointer ];
+				this.flushPointer = ( this.flushPointer + 1 ) % this.bufferManagerList.length;
+
 				if( manager.lengthInMemory > 0 && manager.lengthInMemory < remainFlushRequest ){
 					remainFlushRequest -= manager.lengthInMemory;
 					manager.flushAll();
@@ -91,6 +98,11 @@
 					break;
 				}
 			}
+		},
+		requestSpace: function(num){
+			// If there empty slot is not enough, then ask flush
+			if( this.entryCount + num >= this.maxMemoryEntry )
+				this.askFlush(num);
 		}
 	}
 
@@ -122,32 +134,38 @@
 			this.separator = JSSConst.VarCharSeparator;
 		}
 
+		// destruction settings
+		this.deleteAtTheEnd = false;
+		if( ext == "tmp" && JSSConst.GetConfig("preserve_temp_files") == false )
+			this.deleteAtTheEnd = true;
+
 		// register this instance to BufferPoolManager
 		// TODO: only track fixed buffer manger at this time
 		if( this.type == "fixed" )
 			this.managerIndex = JSSU.BufferPoolManager.addManager( this );
 		// initialize and open file pointer
 		this.fnd = ((ext == "tmp") ? JSSConst.GetConfig("temp_directory") : "") + id + "." + ext;
-		// DEBUG
-		this.writeStream = fs.createWriteStream( this.fnd );
+		this.FD = fs.openSync( this.fnd, 'w+' )
 	}
 	JSSU.BufferManager.prototype = {
-		done: function(){
-			this.writeStream.end();
-		},
 		destruct: function(){
-			this.flushAll();
-			this.done();
+			fs.closeSync( this.FD );
+			if( this.deleteAtTheEnd )
+				fs.unlinkSync( this.fnd );
 		},
 
 		// for memory operation
+		_requestSpace: function(num){
+			JSSU.BufferPoolManager.requestSpace(num);
+		},
 		_write: function(str, callback){
-			this.writeStream.write(str, "utf-8", callback);
+			fs.writeSync( this.FD, str );
 		},
 		flush: function(num){
 			if( this.type == "fixed" ){
 				for( var i = 0; i<num; i++ ){
-					this._write( this.bufferList.shift() );
+					this._write( this.bufferList[ this.inMemoryFirstIndex ] );
+					delete this.bufferList[ this.inMemoryFirstIndex ]
 					this.inMemoryFirstIndex++;
 				}
 			}
@@ -171,7 +189,29 @@
 			this.fire("push");
 			return this.length - 1;
 		},
-		get: function(ind){},
+		get: function(ind){
+			// assume that there would be squential access so load in advance
+			var get = this.bufferList[ ind ];
+			if( !get ){
+				var bunch = Math.min(this.inMemoryFirstIndex - ind, JSSU.BufferPoolManager.flushBunch),
+					schemaLength = this.schema.length;
+				this._requestSpace( bunch );
+				var buf = new Buffer( bunch * schemaLength );
+				fs.readSync( this.FD, buf, 0, bunch * schemaLength, ind * schemaLength );
+				
+				buf = buf.toString();
+				var counter = 0;
+				while( buf.length > 0 ){
+					this.bufferList[ ind + counter ] = buf.substring(0, schemaLength);
+					buf = buf.substring( schemaLength );
+					counter++;
+				}
+				this.inMemoryFirstIndex = ind;
+				get = this.bufferList[ ind ];
+				this.fire("read", counter + 1);
+			}
+			return this.schema.parse( get );
+		},
 
 		// varchar
 		write: function(str){
@@ -191,13 +231,13 @@
 	Object.defineProperties(JSSU.BufferManager.prototype, {
 		length: { get: function(){ 
 			if( this.type == "fixed" )
-				return this.bufferList.length + this.inMemoryFirstIndex; 
+				return this.bufferList.length; 
 			if( this.type == "varchar" )
 				return this.inMemoryString.length + this.inMemoryOffset;
 		} },
 		lengthInMemory: { get: function(){
 			if( this.type == "fixed" )
-				return this.bufferList.length;
+				return this.bufferList.length - this.inMemoryFirstIndex;
 			if( this.type == "varchar" )
 				return this.inMemoryString.length; 
 		} },
@@ -207,7 +247,16 @@
 		this.schema = schema;
 	}
 	JSSU.Schema.prototype = {
-		read: function(string){},
+		parse: function(string){
+			var collect = {};
+			for( let col of this.schema ){
+				collect[ col.name ] = string.substring(0, col.length ).trim();
+				if( col.type == "number" )
+					collect[ col.name ] = parseFloat( collect[ col.name ] );
+				string = string.substring( col.length );
+			}
+			return collect;
+		},
 		create: function(obj){
 			var str = "";
 			for( let col of this.schema ){
@@ -216,6 +265,18 @@
 			return str;
 		} 
 	}
+	Object.defineProperties(JSSU.Schema.prototype,{
+		length: { 
+			get: function(){ 
+				if( !!this._len ) return this._len;
+				var len = 0;
+				for( let col of this.schema ){
+					len += col.length;
+				}
+				return ( this._len = len );
+			}
+		}
+	});
 
 
 	//------------------------------------------------------------------

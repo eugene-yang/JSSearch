@@ -1,7 +1,8 @@
 {
-	"memory_limit": -1,
-	"default_flush_bunch": 10000,
+	"memory_limit": 1,
+	"default_flush_bunch": 100,
 	"temp_directory": "./_tmp/",
+	"preserve_temp_files": true,
 	"index_output_filename": "index",
 	"default_index_with_position": false
 }
