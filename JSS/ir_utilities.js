@@ -86,14 +86,33 @@
 			log( "flush " + num + " remain " + this.entryCount);
 		},
 		askFlush: function(num){
-			var remainFlushRequest = Math.max(num||0, this.flushBunch);
-			while( this.entryCount > this.maxMemoryEntry ){
+			var remainFlushRequest = Math.max(num||0, this.flushBunch),
+				deadCount = 0;
+				// increase dead count when one buffer manager have no things to flush or pinned
+			
+			while( remainFlushRequest > 0 ){
 				var manager = this.bufferManagerList[ this.flushPointer ];
 				this.flushPointer = ( this.flushPointer + 1 ) % this.bufferManagerList.length;
+
+				if( deadCount == this.bufferManagerList.length ){
+					// have gone through all buffer managers
+					if( this.entryCount <= this.maxMemoryEntry )
+						break;
+					else {
+						// dead lock detected
+						// TODO: resolve dead lock by ask all manager to repin
+						throw new Error("Dead lock detected")
+					}
+				}
+				if( manager.isPinned() ){
+					deadCount++;
+					continue;
+				}
 
 				if( manager.lengthInMemory > 0 && manager.lengthInMemory < remainFlushRequest ){
 					remainFlushRequest -= manager.lengthInMemory;
 					manager.flushAll();
+					deadCount++;
 				}
 				else if( manager.lengthInMemory >= remainFlushRequest ){
 					manager.flush( remainFlushRequest );
@@ -143,13 +162,20 @@
 
 		// register this instance to BufferPoolManager
 		// TODO: only track fixed buffer manger at this time
-		if( this.type == "fixed" )
+		this.pinned = false;
+		if( this.type == "fixed" ){
 			this.managerIndex = JSSU.BufferPoolManager.addManager( this );
+		}
 		// initialize and open file pointer
 		this.fnd = ((ext == "tmp") ? JSSConst.GetConfig("temp_directory") : "") + id + "." + ext;
 		this.FD = fs.openSync( this.fnd, 'w+' )
 	}
 	JSSU.BufferManager.prototype = {
+		toRealFile: function(fnd){
+			this.deleteAtTheEnd = false;
+			fs.renameSync( this.fnd, fnd );
+			this.fnd = fnd;
+		},
 		destruct: function(){
 			fs.closeSync( this.FD );
 			if( this.deleteAtTheEnd )
@@ -163,10 +189,19 @@
 		_write: function(str, callback){
 			fs.writeSync( this.FD, str );
 		},
+		pin: function(){
+			this.pinned = true;
+		},
+		unpin: function(){
+			this.pinned = false;
+		},
+		isPinned: function(){
+			return this.pinned;
+		},
 		flush: function(num){
 			if( this.type == "fixed" ){
 				for( var i = 0; i<num; i++ ){
-					this._write( this.bufferList[ this.inMemoryFirstIndex ] );
+					this._write( this.schema.create(this.bufferList[ this.inMemoryFirstIndex ]) );
 					delete this.bufferList[ this.inMemoryFirstIndex ]
 					this.inMemoryFirstIndex++;
 				}
@@ -187,12 +222,12 @@
 			if( this.type != "fixed" ) 
 				throw new TypeError("Called push when BufferManager is not set as fixed")
 
-			this.bufferList.push( this.schema.create(obj) );
+			this.bufferList.push( obj );
 			this.fire("push");
 			return this.length - 1;
 		},
 		get: function(ind){
-			// assume that there would be squential access so load in advance
+			// assume that there would be sequential access so load in advance
 			var get = this.bufferList[ ind ];
 			if( !get ){
 				var bunch = Math.min(this.inMemoryFirstIndex - ind, JSSU.BufferPoolManager.flushBunch),
@@ -334,15 +369,10 @@
 	}
 	JSSU.Document.prototype = {
 		createIndex: function(){
+			// this will recursively call String object to perform tokenization
 			var tokenList = [...this.String.getFlatIterator()];
-			tokenList.sort(function(a,b){
-				if( a.type == b.type ){
-					var ta = a.term.length > 32 ? md5( a.term ) : a.term,
-						tb = b.term.length > 32 ? md5( b.term ) : b.term;
-					return (ta < tb)*(-1) + 0.5;
-				}
-				return (a.type < b.type)*(-1) + 0.5;
-			})
+
+			tokenList.sort( JSSU.IndexedList.soringFunction )
 
 			for( let item of tokenList ){
 				// write posting list
@@ -353,7 +383,7 @@
 					"DocumentId": this.Id,
 					"Type": item.type,
 					"Term": item.term.length > 32 ? md5(item.term) : item.term,
-					"Count": item.post.length,
+					"TermFreq": item.post.length,
 					"PositionPointer": postPointer
 				})
 			}

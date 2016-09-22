@@ -45,14 +45,16 @@
 			{ name: "Type", length: 10, type: "string" },
 			{ name: "Term", length: 32, type: "string" },
 			{ name: "DocumentId", length: 16, type: "string" },
-			{ name: "Count", length: 4, type: "number" },
+			{ name: "TermFreq", length: 4, type: "number" },
+			{ name: "DocFreq", length: 4, type: "number" },
 			{ name: "PositionPointer", length: 12, type: "number" }
 		],
 		NoPosition: [
 			{ name: "Type", length: 10, type: "string" },
 			{ name: "Term", length: 32, type: "string" },
 			{ name: "DocumentId", length: 16, type: "string" },
-			{ name: "Count", length: 4, type: "number" }
+			{ name: "TermFreq", length: 4, type: "number" },
+			{ name: "DocFreq", length: 4, type: "number" }
 		]
 	}
 	JSSConst.VarCharSeparator = "\u001d"; // ASCII code group separator  
