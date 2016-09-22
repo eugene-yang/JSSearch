@@ -11,6 +11,8 @@ console.time("Runtime");
 
 var fn = "fr940104.0";
 
+// TODO: Split each document into independent files
+
 // fs.readdirSync(fileDir).forEach(function(fn){
 	executFlag++;
 	fs.readFile( fileDir + fn, 'utf8', function(err,data){

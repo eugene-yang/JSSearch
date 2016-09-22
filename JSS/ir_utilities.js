@@ -47,8 +47,10 @@
 		}
 	}
 
+	//--------------- Basic Storage Classes ------------------
+
 	// Singleton, universal buffer manager
-	// handling the memory constraint by round robin
+	// TODO: Perform different buffer swapping policy base on current state, like writing/reading state
 	JSSU.BufferPoolManager = {
 		maxMemoryEntry: JSSConst.GetConfig("memory_limit") == -1 ? Infinity : JSSConst.GetConfig("memory_limit"),
 		flushBunch: JSSConst.GetConfig("default_flush_bunch") || 100,
@@ -278,9 +280,6 @@
 		}
 	});
 
-
-	//------------------------------------------------------------------
-
 	// create global buffer manager instance for posting file
 	var PostingListBufferManager = new JSSU.BufferManager({
 		id: JSSConst.GetConfig("index_output_filename"),
@@ -291,6 +290,29 @@
 	PostingListBufferManager.createString = function(postingList){
 		return postingList.join(",");
 	}
+
+	//---------------------- High Level Interface -----------------------
+
+
+	JSSU.DocumentSet = function(){
+		this.set = {};
+		this._count = 0;
+	}
+	JSSU.DocumentSet.prototype = {
+		addDocument: function(doc){
+			if( !( doc instanceof JSSU.Document ) )
+				throw new TypeError("Should be JSSU.Document")
+			this.set[ doc.Id ] = doc;
+			this._count++;
+		},
+		getIterator: function*(){
+			yield* this.set.getIterator();
+		}
+	}
+	Object.defineProperties(JSSU.DocumentSet.prototype, {
+		length: { get: function(){ return this._count; } }
+	})
+
 
 	JSSU.Document = function(id, string, config){
 		if( typeof(id) === "object" ){
@@ -312,7 +334,17 @@
 	}
 	JSSU.Document.prototype = {
 		createIndex: function(){
-			for( let item of this.String.getFlatIterator() ){
+			var tokenList = [...this.String.getFlatIterator()];
+			tokenList.sort(function(a,b){
+				if( a.type == b.type ){
+					var ta = a.term.length > 32 ? md5( a.term ) : a.term,
+						tb = b.term.length > 32 ? md5( b.term ) : b.term;
+					return (ta < tb)*(-1) + 0.5;
+				}
+				return (a.type < b.type)*(-1) + 0.5;
+			})
+
+			for( let item of tokenList ){
 				// write posting list
 				if( this.config.tokenPosition )
 					var postPointer = PostingListBufferManager.write( PostingListBufferManager.createString(item.post) )
@@ -452,17 +484,17 @@
 			// run all type identifiers in proper sequence
 
 			// case f: Date
-			this.tokens.rule.Date = this.parseDate();
+			this.tokens.rule.date = this.parseDate();
 			// case j: IP addresses
-			this.tokens.rule.IP = this.parseIP();
+			this.tokens.rule.ip = this.parseIP();
 			// case g: Number
-			this.tokens.rule.Number = this.parseNumber();
+			this.tokens.rule.number = this.parseNumber();
 			// case i: Email
-			this.tokens.rule.Email = this.parseEmail();
+			this.tokens.rule.email = this.parseEmail();
 			// case h: File Extension : don't eat
 			this.tokens.rule.exts = this.parseFileExtension();
 			// case k: URL
-			this.tokens.rule.URL = this.parseURL();
+			this.tokens.rule.url = this.parseURL();
 			// case c,d,e: Hyphenated terms
 			this._addPosition(this.tokens.word, this.parseHyphenatedTerms());
 			// case a and general word parser
@@ -555,7 +587,8 @@
 				dat = match[0];
 				(/\d\s?(st|nd|th)/).test(dat) && ( dat = dat.replace(/(st|nd|th)/, "") );
 				if( !isNaN(Date.parse(dat)) ){
-					this._addPosition( res, (new Date(dat)).toISOString(), [match.index, match.index + dat.length - 1] )
+					// Only use the date part, so set to GMT
+					this._addPosition( res, (new Date(dat + " GMT")).toISOString(), [match.index, match.index + dat.length - 1] )
 					eatSet.push( match )
 				}
 			}
