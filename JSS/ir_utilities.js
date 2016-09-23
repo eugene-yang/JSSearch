@@ -52,11 +52,28 @@
 	// Singleton, universal buffer manager
 	// TODO: Perform different buffer swapping policy base on current state, like writing/reading state
 	JSSU.BufferPoolManager = {
+		tempDir: JSSConst.GetConfig("temp_directory"),
 		maxMemoryEntry: JSSConst.GetConfig("memory_limit") == -1 ? Infinity : JSSConst.GetConfig("memory_limit"),
 		flushBunch: JSSConst.GetConfig("default_flush_bunch") || 100,
 		flushPointer: 0, // perform round-robin
 		bufferManagerList: [],
 		entryCount: 0,
+		initialize: function(){
+			// clear temp files
+			try{ var files = fs.readdirSync( this.tempDir ) }
+			catch( e ){ return false; }
+			files.forEach(function(fn){
+				if( fn.split(".")[1] == "tmp" )
+					fs.unlinkSync( this.tempDir + "/" + fn );
+			})
+			this.bufferManager = [];
+			this.flushPointer = 0;
+			this.entryCount = 0;
+		},
+		clean: function(){
+			// clean up all temp files by calling destruct method of each buffer manager
+			// and delete if from bufferList, and call global.gc if it exists to collect garbage
+		},
 		addManager: function(managerInstance){
 			this.bufferManagerList.push(managerInstance);
 			var pool = this, 
@@ -83,7 +100,7 @@
 		},
 		decrement: function(managerIndex, num){
 			this.entryCount -= num;
-			log( "flush " + num + " remain " + this.entryCount);
+			// log( "flush " + num + " remain " + this.entryCount);
 		},
 		askFlush: function(num){
 			var remainFlushRequest = Math.max(num||0, this.flushBunch),
@@ -104,7 +121,7 @@
 						throw new Error("Dead lock detected")
 					}
 				}
-				if( manager.isPinned() || manager.lengthInMemory == 0){
+				if( manager === undefined || manager.isPinned() || manager.lengthInMemory == 0){
 					deadCount++;
 					continue;
 				}
@@ -167,7 +184,7 @@
 			this.managerIndex = JSSU.BufferPoolManager.addManager( this );
 		}
 		// initialize and open file pointer
-		this.fnd = ((ext == "tmp") ? JSSConst.GetConfig("temp_directory") : "") + id + "." + ext;
+		this.fnd = ((ext == "tmp") ? JSSU.BufferPoolManager.tempDir : "") + id + "." + ext;
 		this.FD = fs.openSync( this.fnd, 'w+' )
 	}
 	JSSU.BufferManager.prototype = {
@@ -176,10 +193,17 @@
 			fs.renameSync( this.fnd, fnd );
 			this.fnd = fnd;
 		},
-		destruct: function(){
-			fs.closeSync( this.FD );
-			if( this.deleteAtTheEnd )
-				fs.unlinkSync( this.fnd );
+		destroy: function(){
+			try{
+				fs.closeSync( this.FD );
+				if( this.deleteAtTheEnd )
+					fs.unlinkSync( this.fnd );
+				JSSU.BufferPoolManager.removeManger( this.managerIndex );
+			}
+			catch(e){
+				log( "closed already" )
+				return;
+			}
 		},
 
 		// for memory operation
@@ -322,15 +346,15 @@
 		}
 	});
 
-	// create global buffer manager instance for posting file
-	var PostingListBufferManager = new JSSU.BufferManager({
+	// create global buffer manager instance for position list file
+	var PositionListBufferManager = new JSSU.BufferManager({
 		id: JSSConst.GetConfig("inverted_index_type"),
 		schema: null,
 		type: "varchar",
-		ext: "posting"
+		ext: "position"
 	})
-	PostingListBufferManager.createString = function(postingList){
-		return postingList.join(",");
+	PositionListBufferManager.createString = function(positionList){
+		return positionList.join(",");
 	}
 
 	//---------------------- High Level Interface -----------------------
@@ -354,6 +378,14 @@
 			// drop document temp files along merging
 			// output an JSSU.IndexedList object with entries all flushed
 			// finalList.finalize()
+			var l = [];
+			for( let id of this.getIterator() ){
+				l.push( new JSSU.IndexedList(null, this.set[ id ]) );
+			}
+			// unlink all document instance so that the garbage collection can collect 
+			// these along merging
+			this.set = {};
+			return JSSU.IndexedList.Merge( l );
 		}
 	}
 	Object.defineProperties(JSSU.DocumentSet.prototype, {
@@ -377,15 +409,25 @@
 			!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
 		}
 	}
-	JSSU.IndexedList.soringFunction = function(a,b){
-		if( a.type == b.type ){
-			var ta = a.term.length > 32 ? md5( a.term ) : a.term,
-				tb = b.term.length > 32 ? md5( b.term ) : b.term;
-			return (ta < tb)*(-1) + 0.5;
+	JSSU.IndexedList.Merge = function(unmerged){
+		if( unmerged instanceof JSSU.IndexedList )
+			unmerged = [...arguments];
+		if( unmerged.length <= 1 )
+			return unmerged[0] || null;
+		var merged = [];
+		while( unmerged.length > 0 ){
+			if( unmerged.length == 1 )
+				merged.push( unmerged.shift() );
+			else {
+				var a = unmerged.shift(), b = unmerged.shift();
+				merged.push( JSSU.IndexedList.MergePair( a, b ) )
+				a.destroy();
+				b.destroy();
+			}
 		}
-		return (a.type < b.type)*(-1) + 0.5;
+		return JSSU.IndexedList.Merge( merged );
 	}
-	JSSU.IndexedList.Merge =  function(lista, listb){
+	JSSU.IndexedList.MergePair =  function(lista, listb){
 		var newList = new JSSU.IndexedList( md5( lista.Id + listb.Id ) ),
 			Ita = lista.getIterator(), a = Ita.next(),
 			Itb = listb.getIterator(), b = Itb.next(),
@@ -428,6 +470,9 @@
 			this.bufferManager.toRealFile( 
 				JSSConst.GetConfig("index_output_directory") + JSSConst.GetConfig("inverted_index_type") + ".index" );
 		},
+		destroy: function(){
+			this.bufferManager.destroy();
+		},
 		getIterator: function*(){
 			yield* this.bufferManager.getIteratorFromHead();
 		},
@@ -454,6 +499,7 @@
 		this.String = new JSSU.String( string );
 		this.bufferManager = new JSSU.BufferManager(id, 
 			!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
+
 	}
 	JSSU.Document.prototype = {
 		createIndex: function(){
@@ -472,7 +518,7 @@
 			for( let item of tokenList ){
 				// write posting list
 				if( this.config.tokenPosition )
-					var postPointer = PostingListBufferManager.write( PostingListBufferManager.createString(item.post) )
+					var postPointer = PositionListBufferManager.write( PositionListBufferManager.createString(item.post) )
 				// write entry
 				this.bufferManager.push({
 					"DocumentId": this.Id,
@@ -747,19 +793,9 @@
 		}
 	}
 
-
-
-	// TODO: Add methods for non-nodejs environment
-	JSSU.Buffer = function(){
-
-	}
-
-
-
-
-
-
-
+	// -------------------- Running Container -------------------------
+	// For initialize running framework to let script can run in a full
+	// initialized environment.
 
 	 return JSSU;
 }))

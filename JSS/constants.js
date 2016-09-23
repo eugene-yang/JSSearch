@@ -23,10 +23,10 @@
 	
 	JSSConst.RE = {
 		URL: {
-			general: /([a-z0-9]+\:\/\/)?[a-z0-9\-]{1,63}(\.[a-z0-9\-]{1,63})*(\.[a-z0-9\-]{2,63})(\/?(([\w\-])+\/?)*(\.[\w\-]+!\/)?)?(\?[\w\-=&+;]+)?(#[\w\-=&+;]+)?/gi,
-			//             protocol                                 domain                                   dir          file_ext         get-param         hashtag
+			general: /([a-z0-9]+\:\/\/)?[a-z0-9\-]{1,63}(\.[a-z0-9\-]{1,63})*(\.[a-z]{2,63})(\/?(([\w\-])+\/?)*(\.[\w\-]+!\/)?)?(\?[\w\-=&+;]+)?(#[\w\-=&+;]+)?/gi,
+			//             protocol                                 domain                            dir          file_ext         get-param         hashtag
 			Protocol: /([a-z0-9]+\:\/\/)/ig,
-			Server: /[a-z0-9\-]{1,63}(\.[a-z0-9\-]{1,63})*(\.[a-z0-9\-]{2,63})/ig,
+			Server: /[a-z0-9\-]{1,63}(\.[a-z]{1,63})*(\.[a-z0-9\-]{2,63})/ig,
 		},
 		IP: {
 			v4: /(\d{1,3}\.){3}\d{1,3}/g,
@@ -46,7 +46,6 @@
 			{ name: "Term", length: 32, type: "string" },
 			{ name: "DocumentId", length: 16, type: "string" },
 			{ name: "TermFreq", length: 4, type: "number" },
-			{ name: "DocFreq", length: 4, type: "number" },
 			{ name: "PositionPointer", length: 12, type: "number" }
 		],
 		NoPosition: [
@@ -54,7 +53,6 @@
 			{ name: "Term", length: 32, type: "string" },
 			{ name: "DocumentId", length: 16, type: "string" },
 			{ name: "TermFreq", length: 4, type: "number" },
-			{ name: "DocFreq", length: 4, type: "number" }
 		]
 	}
 	JSSConst.VarCharSeparator = "\u001d"; // ASCII code group separator  
