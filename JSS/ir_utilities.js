@@ -349,11 +349,92 @@
 		},
 		getIterator: function*(){
 			yield* this.set.getIterator();
+		},
+		toInvertedIndex: function(){
+			// drop document temp files along merging
+			// output an JSSU.IndexedList object with entries all flushed
+			// finalList.finalize()
 		}
 	}
 	Object.defineProperties(JSSU.DocumentSet.prototype, {
 		length: { get: function(){ return this._count; } }
 	})
+
+	JSSU.IndexedList = function(Id, target, config){
+		// target accept both null or document instance
+		target = target || null;
+
+		this.Id = Id;
+		this.config = config || {};
+		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("default_index_with_position");
+
+		if( target instanceof JSSU.Document ){
+			this.Id = this.Id || target.Id;
+			this.bufferManager = target.bufferManager;
+		}
+		else{
+			this.bufferManager = new JSSU.BufferManager( Id, 
+			!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
+		}
+	}
+	JSSU.IndexedList.soringFunction = function(a,b){
+		if( a.type == b.type ){
+			var ta = a.term.length > 32 ? md5( a.term ) : a.term,
+				tb = b.term.length > 32 ? md5( b.term ) : b.term;
+			return (ta < tb)*(-1) + 0.5;
+		}
+		return (a.type < b.type)*(-1) + 0.5;
+	}
+	JSSU.IndexedList.Merge =  function(lista, listb){
+		var newList = new JSSU.IndexedList( md5( lista.Id + listb.Id ) ),
+			Ita = lista.getIterator(), a = Ita.next(),
+			Itb = listb.getIterator(), b = Itb.next(),
+			movea = function(){ 
+				newList.push(a.value); a = Ita.next(); 
+			},
+			moveb = function(){ 
+				newList.push(b.value); b = Itb.next(); 
+			};
+
+		var compareSeq = ['Type', 'Term'];
+		while( !a.done || !b.done ){
+			if( a.done ) moveb();
+			else if( b.done ) movea();
+			else {
+				var i=0;
+				for( ; i<compareSeq.length; i++ ){
+					if( a.value[ compareSeq[i] ] < b.value[ compareSeq[i] ] ){
+						movea();
+						break;
+					}
+					else if( b.value[ compareSeq[i] ] < a.value[ compareSeq[i] ] ){
+						moveb();
+						break;
+					}
+				}
+				if( i == compareSeq.length ){
+					// compare term frequency
+					if( a.value.TermFreq > b.value.TermFreq )
+						movea();
+					else { moveb(); }
+				}
+			}
+		}
+		return newList;
+	}
+	JSSU.IndexedList.prototype = {
+		finalize: function(){
+			this.bufferManager.flushAll();
+			this.bufferManager.toRealFile( 
+				JSSConst.GetConfig("index_output_directory") + JSSConst.GetConfig("inverted_index_type") + ".index" );
+		},
+		getIterator: function*(){
+			yield* this.bufferManager.getIteratorFromHead();
+		},
+		push: function(obj){
+			this.bufferManager.push(obj);
+		}
+	}
 
 
 	JSSU.Document = function(id, string, config){
@@ -379,7 +460,14 @@
 			// this will recursively call String object to perform tokenization
 			var tokenList = [...this.String.getFlatIterator()];
 
-			tokenList.sort( JSSU.IndexedList.soringFunction )
+			tokenList.sort(function(a,b){
+				if( a.type == b.type ){
+					var ta = a.term.length > 32 ? md5( a.term ) : a.term,
+						tb = b.term.length > 32 ? md5( b.term ) : b.term;
+					return (ta < tb)*(-1) + 0.5;
+				}
+				return (a.type < b.type)*(-1) + 0.5;
+			})
 
 			for( let item of tokenList ){
 				// write posting list
