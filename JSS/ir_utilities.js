@@ -90,7 +90,7 @@
 				deadCount = 0;
 				// increase dead count when one buffer manager have no things to flush or pinned
 			
-			while( remainFlushRequest > 0 ){
+			while( this.entryCount > this.maxMemoryEntry  ){
 				var manager = this.bufferManagerList[ this.flushPointer ];
 				this.flushPointer = ( this.flushPointer + 1 ) % this.bufferManagerList.length;
 
@@ -104,7 +104,7 @@
 						throw new Error("Dead lock detected")
 					}
 				}
-				if( manager.isPinned() ){
+				if( manager.isPinned() || manager.lengthInMemory == 0){
 					deadCount++;
 					continue;
 				}
@@ -120,10 +120,10 @@
 				}
 			}
 		},
-		requestSpace: function(num){
+		requestSpace: function(num, managerIndex){
 			// If there empty slot is not enough, then ask flush
 			if( this.entryCount + num >= this.maxMemoryEntry )
-				this.askFlush(num);
+				this.askFlush(num, managerIndex);
 		}
 	}
 
@@ -201,10 +201,10 @@
 		flush: function(num){
 			if( this.type == "fixed" ){
 				for( var i = 0; i<num; i++ ){
-					this._write( this.schema.create(this.bufferList[ this.inMemoryFirstIndex ]) );
-					delete this.bufferList[ this.inMemoryFirstIndex ]
-					this.inMemoryFirstIndex++;
+					this._write( this.schema.create(this.bufferList[ this.inMemoryFirstIndex + i ]) );
+					delete this.bufferList[ this.inMemoryFirstIndex + i ]
 				}
+				this.inMemoryFirstIndex += num;
 			}
 			if( this.type == "varchar" ){
 				this._write( this.inMemoryString.substring(0, num) );
@@ -230,7 +230,8 @@
 			// assume that there would be sequential access so load in advance
 			var get = this.bufferList[ ind ];
 			if( !get ){
-				var bunch = Math.min(this.inMemoryFirstIndex - ind, JSSU.BufferPoolManager.flushBunch),
+				this.pin();
+				var bunch = this.inMemoryFirstIndex - ind,
 					schemaLength = this.schema.length;
 				this._requestSpace( bunch );
 				var buf = new Buffer( bunch * schemaLength );
@@ -239,15 +240,21 @@
 				buf = buf.toString();
 				var counter = 0;
 				while( buf.length > 0 ){
-					this.bufferList[ ind + counter ] = buf.substring(0, schemaLength);
+					this.bufferList[ ind + counter ] = this.schema.parse( buf.substring(0, schemaLength) );
 					buf = buf.substring( schemaLength );
 					counter++;
 				}
 				this.inMemoryFirstIndex = ind;
 				get = this.bufferList[ ind ];
-				this.fire("read", counter + 1);
+				this.fire("read", counter);
+				this.unpin();
 			}
-			return this.schema.parse( get );
+			return get;
+		},
+		getIteratorFromHead: function* (){
+			for( var i=0; i<this.length; i++ ){
+				yield this.get( i );
+			}
 		},
 
 		// varchar
@@ -317,7 +324,7 @@
 
 	// create global buffer manager instance for posting file
 	var PostingListBufferManager = new JSSU.BufferManager({
-		id: JSSConst.GetConfig("index_output_filename"),
+		id: JSSConst.GetConfig("inverted_index_type"),
 		schema: null,
 		type: "varchar",
 		ext: "posting"
