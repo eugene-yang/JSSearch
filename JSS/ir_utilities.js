@@ -301,13 +301,23 @@
 			}
 			return get;
 		},
-		getIteratorFromHead: function* (){
-			for( var i=0; i<this.length; i++ ){
+		getByOffset: function(offset){
+			return this.get( Math.floor(offset / this.schema.length) );
+		},
+		getIteratorFromIndex: function*(ind){
+			for( var i=ind; i<this.length; i++ ){
 				var ret = this.get( i );
 				this.dropCache( i )
 				yield ret;
 			}
 		},
+		getIteratorFromOffset: function*(offset){
+			yield* this.getIteratorFromIndex(Math.floor(offset / this.schema.length));
+		},
+		getIteratorFromHead: function* (){
+			yield* this.getIteratorFromIndex(0);
+		},
+
 
 		// varchar
 		write: function(str){
@@ -413,7 +423,16 @@
 			// unlink all document instance so that the garbage collection can collect 
 			// these along merging
 			this.set = {};
-			return JSSU.IndexedList.Merge( l );
+
+			var combinedIndex = JSSU.IndexedList.Merge( l );
+			var indexHT = new JSSU.IndexHashTable( combinedIndex );
+			indexHT.calculate();
+			indexHT.finalize();
+			combinedIndex.finalize();
+			return {
+				HashTable: indexHT,
+				PostingList: combinedIndex
+			}
 		}
 	}
 	Object.defineProperties(JSSU.DocumentSet.prototype, {
@@ -427,6 +446,8 @@
 		this.Id = Id;
 		this.config = config || {};
 		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("default_index_with_position");
+
+		this.ext = "posting";
 
 		if( target instanceof JSSU.Document ){
 			this.Id = this.Id || target.Id;
@@ -457,8 +478,8 @@
 	}
 	JSSU.IndexedList.MergePair =  function(lista, listb){
 		var newList = new JSSU.IndexedList( md5( lista.Id + listb.Id ) ),
-			Ita = lista.getIterator(), a = Ita.next(),
-			Itb = listb.getIterator(), b = Itb.next(),
+			Ita = lista.createIterator(), a = Ita.next(),
+			Itb = listb.createIterator(), b = Itb.next(),
 			movea = function(){ 
 				newList.push(a.value); a = Ita.next(); 
 			},
@@ -496,19 +517,86 @@
 		finalize: function(){
 			this.bufferManager.flushAll();
 			this.bufferManager.toRealFile( 
-				JSSConst.GetConfig("index_output_directory") + JSSConst.GetConfig("inverted_index_type") + ".index" );
+				JSSConst.GetConfig("index_output_directory") + JSSConst.GetConfig("inverted_index_type") + "." + this.ext );
 		},
 		destroy: function(){
 			this.bufferManager.destroy();
 		},
-		getIterator: function*(){
+		createIterator: function*(){
 			yield* this.bufferManager.getIteratorFromHead();
 		},
 		push: function(obj){
 			this.bufferManager.push(obj);
+		},
+		createIteratorByIndex: function(ind){
+			return this.bufferManager.getIteratorFromIndex(ind);
+		},
+		createIteratorByOffset: function(offset){
+			return this.bufferManager.getIteratorFromOffset( offset );
 		}
 	}
+	Object.defineProperties(JSSU.IndexedList.prototype, {
+		schemaLength: {
+			get: function(){ return this.bufferManager.schema.length; }
+		}
+	})
 
+	JSSU.IndexHashTable = function(combinedIndex){
+		this.combinedIndex = combinedIndex;
+		this.bufferManager = new JSSU.BufferManager( "indexHT",  JSSConst.IndexSchema.HashTable );
+		this.ext = "index";
+		this.hashTable = {};
+	}
+	JSSU.IndexHashTable.prototype = {
+		calculate: function(){
+			var counter = 0;
+			var postingHead = null,
+				currentType = null,
+				currentTerm = null,
+				dfCounter = 0;
+			for( let item of this.combinedIndex.createIterator() ){
+				if( currentType == null || item.Type != currentType || item.Term != currentTerm ){
+					if( currentType != null ){ // push
+						this.push({
+							Type: currentType,
+							Term: currentTerm,
+							DocFreq: dfCounter,
+							PostingPointer: postingHead * this.combinedIndex.schemaLength
+						})
+					}
+					// new term
+					postingHead = counter;
+					currentType = item.Type;
+					currentTerm = item.Term;
+					dfCounter = 0;
+				}
+				dfCounter++;
+				counter++;
+			}
+		},
+		getPostingIteratorByOffset: function*(offset){
+			var It = this.combinedIndex.createIteratorByOffset(offset);
+			var opItem = It.next().value;
+			yield opItem;
+			for( let item of It ){
+				if( item.Type != opItem.Type || item.Term != opItem.Term )
+					break;
+				yield item;
+			}
+		},
+		load: function(){
+			// load all entries into memory, if still under memory constraint,
+			// then would have to perform sequential access
+			
+			// without memory constraint version
+			this.hashTable = {};
+			for( let item of this.createIterator() ){
+				this.hashTable[ item.Type ] = this.hashTable[ item.Type ] || {};
+				this.hashTable[ item.Type ][ item.Term ] = item;
+			}
+		}
+	}
+	JSSU.IndexHashTable.extend( JSSU.IndexedList );
 
 	JSSU.Document = function(id, string, config){
 		if( typeof(id) === "object" ){

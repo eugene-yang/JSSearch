@@ -41,6 +41,12 @@
 	}
 
 	JSSConst.IndexSchema = {
+		HashTable: [
+			{ name: "Type", length: 10, type: "string" },
+			{ name: "Term", length: 32, type: "string" },
+			{ name: "DocFreq", length: 6, type: "number" },
+			{ name: "PostingPointer", length: 12, type: "number" }
+		],
 		Position: [
 			{ name: "Type", length: 10, type: "string" },
 			{ name: "Term", length: 32, type: "string" },
