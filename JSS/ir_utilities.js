@@ -244,12 +244,13 @@
 				for( var j = 0; j<this.readbufferList.length && deleteCounter>0; j++ ){
 					this.dropCache(j) && deleteCounter--;
 				}
+				var str = "";
 				for( var i = 0; i<deleteCounter; i++ ){
-					this._write( this.schema.create(this.writebufferList[ this.inMemoryFirstIndex ]), 
-								 this.schema.length*this.inMemoryFirstIndex );
-					delete this.writebufferList[ this.inMemoryFirstIndex ]
-					this.inMemoryFirstIndex++;
+					str += this.schema.create(this.writebufferList[ this.inMemoryFirstIndex + i ]);
+					delete this.writebufferList[ this.inMemoryFirstIndex + i ]
 				}
+				this._write( str, this.schema.length * this.inMemoryFirstIndex );
+				this.inMemoryFirstIndex += num;
 			}
 			if( this.type == "varchar" ){
 				this._write( this.inMemoryString.substring(0, num) );
