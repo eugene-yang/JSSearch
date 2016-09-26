@@ -139,7 +139,7 @@
 		},
 		requestSpace: function(num, managerIndex){
 			// If there empty slot is not enough, then ask flush
-			if( this.entryCount + num >= this.maxMemoryEntry )
+			if( this.entryCount + num > this.maxMemoryEntry )
 				this.askFlush(num, managerIndex);
 		}
 	}
@@ -160,7 +160,9 @@
 		// for fixed schema
 		if( this.type == "fixed" ){
 			this.schema = new JSSU.Schema( schema );
-			this.bufferList = [];
+			this.writebufferList = [];
+			this.readbufferList = [];
+			this.readCounter = 0;
 			this.inMemoryFirstIndex = 0;
 		}
 
@@ -210,8 +212,13 @@
 		_requestSpace: function(num){
 			JSSU.BufferPoolManager.requestSpace(num);
 		},
-		_write: function(str, callback){
-			fs.writeSync( this.FD, str );
+		_write: function(str, offset, callback){
+			if( this.FD == 6 ) debugger;
+			if( offset )
+				fs.writeSync( this.FD, str, offset, "utf8" );
+			else{
+				fs.writeSync( this.FD, str );
+			}
 		},
 		pin: function(){
 			this.pinned = true;
@@ -222,13 +229,27 @@
 		isPinned: function(){
 			return this.pinned;
 		},
+		dropCache: function(ind){
+			if( this.readbufferList[ind] !== undefined ){
+				delete this.readbufferList[ ind ];
+				this.readCounter--;
+				this.fire("flush", 1);
+				return true;
+			}
+			return false;
+		},
 		flush: function(num){
 			if( this.type == "fixed" ){
-				for( var i = 0; i<num; i++ ){
-					this._write( this.schema.create(this.bufferList[ this.inMemoryFirstIndex + i ]) );
-					delete this.bufferList[ this.inMemoryFirstIndex + i ]
+				var deleteCounter = num;
+				for( var j = 0; j<this.readbufferList.length && deleteCounter>0; j++ ){
+					this.dropCache(j) && deleteCounter--;
 				}
-				this.inMemoryFirstIndex += num;
+				for( var i = 0; i<deleteCounter; i++ ){
+					this._write( this.schema.create(this.writebufferList[ this.inMemoryFirstIndex ]), 
+								 this.schema.length*this.inMemoryFirstIndex );
+					delete this.writebufferList[ this.inMemoryFirstIndex ]
+					this.inMemoryFirstIndex++;
+				}
 			}
 			if( this.type == "varchar" ){
 				this._write( this.inMemoryString.substring(0, num) );
@@ -246,38 +267,44 @@
 			if( this.type != "fixed" ) 
 				throw new TypeError("Called push when BufferManager is not set as fixed")
 
-			this.bufferList.push( obj );
+			this._requestSpace(1);
+			this.writebufferList.push( obj );
 			this.fire("push");
 			return this.length - 1;
 		},
 		get: function(ind){
 			// assume that there would be sequential access so load in advance
-			var get = this.bufferList[ ind ];
+			var get = this.writebufferList[ ind ] || this.readbufferList[ ind ];
 			if( !get ){
-				this.pin();
-				var bunch = this.inMemoryFirstIndex - ind,
+				var nextReadCache = ind + 1;
+				for( ; nextReadCache < this.readbufferList.length && this.readbufferList[ nextReadCache ] === undefined; nextReadCache++ ){}
+				
+				var bunch = Math.min( nextReadCache - ind, this.inMemoryFirstIndex - ind, JSSU.BufferPoolManager.flushBunch),
 					schemaLength = this.schema.length;
 				this._requestSpace( bunch );
+				
 				var buf = new Buffer( bunch * schemaLength );
 				fs.readSync( this.FD, buf, 0, bunch * schemaLength, ind * schemaLength );
 				
 				buf = buf.toString();
 				var counter = 0;
 				while( buf.length > 0 ){
-					this.bufferList[ ind + counter ] = this.schema.parse( buf.substring(0, schemaLength) );
+					this.readbufferList[ ind + counter ] = this.schema.parse( buf.substring(0, schemaLength) );
 					buf = buf.substring( schemaLength );
 					counter++;
 				}
-				this.inMemoryFirstIndex = ind;
-				get = this.bufferList[ ind ];
+				get = this.readbufferList[ ind ];
+				if( isNaN(get.TermFreq) )debugger;
+				this.readCounter += counter;
 				this.fire("read", counter);
-				this.unpin();
 			}
 			return get;
 		},
 		getIteratorFromHead: function* (){
 			for( var i=0; i<this.length; i++ ){
-				yield this.get( i );
+				var ret = this.get( i );
+				this.dropCache( i )
+				yield ret;
 			}
 		},
 
@@ -299,13 +326,13 @@
 	Object.defineProperties(JSSU.BufferManager.prototype, {
 		length: { get: function(){ 
 			if( this.type == "fixed" )
-				return this.bufferList.length; 
+				return this.writebufferList.length; 
 			if( this.type == "varchar" )
 				return this.inMemoryString.length + this.inMemoryOffset;
 		} },
 		lengthInMemory: { get: function(){
 			if( this.type == "fixed" )
-				return this.bufferList.length - this.inMemoryFirstIndex;
+				return this.writebufferList.length - this.inMemoryFirstIndex + this.readCounter;
 			if( this.type == "varchar" )
 				return this.inMemoryString.length; 
 		} },

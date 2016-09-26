@@ -1,5 +1,5 @@
 {
-	"memory_limit": -1,
+	"memory_limit": 1000,
 	"default_flush_bunch": 100,
 	"temp_directory": "./_tmp/",
 	"preserve_temp_files": false,
