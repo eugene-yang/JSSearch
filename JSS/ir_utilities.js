@@ -23,6 +23,7 @@
 	//--------------- Basic Event Object ---------------------
 	JSSU.Eventable = function(){
 		this.__event__stack__ = {};
+		this.__event__universal__listeners = [];
 		this.__event__parent__ = null;
 	}
 	JSSU.Eventable.prototype = {
@@ -30,6 +31,10 @@
 			if( child.__proto__.__super === JSSU.Eventable ){
 				child.__event__parent__ = this;
 			}
+		},
+		onAllEvents: function(callback){
+			this.__event__universal__listeners.push( callback );
+			return this.__event__universal__listeners.length - 1;
 		},
 		on: function(event, callback){
 			this.__event__stack__[event] = this.__event__stack__[event] || [];
@@ -47,7 +52,8 @@
 		fire: function(event, arg){
 			var eveObj = {
 				event: event,
-				target: this
+				target: this,
+				argument: arg
 			};
 			this.__dispatch( eveObj, arg )
 		},
@@ -55,10 +61,15 @@
 			var goPropagate = true;
 			eveObj.stopPropagation = function(){ goPropagate = false; }
 
-			if( !!this.__event__stack__[eveObj.event] ){
+			// invoke the specified event listeners first
+			// then invoke the universal event listeners
+			if( this.__event__stack__[eveObj.event] !== undefined ){
 				for( let handler of this.__event__stack__[eveObj.event] ){
 					!!handler && handler.call(this, eveObj, arg );
 				}
+			}
+			for( let ul of this.__event__universal__listeners ){
+				!!ul && ul.call(this, eveObj, arg );
 			}
 			if( goPropagate && !!this.__event__parent__ )
 				this.__event__parent__.__dispatch(eveObj, arg);
@@ -452,7 +463,6 @@
 			var indexHT = new JSSU.IndexHashTable( combinedIndex );
 			indexHT.calculate();
 			
-
 			return {
 				HashTable: indexHT,
 				PostingList: combinedIndex
