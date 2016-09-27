@@ -78,7 +78,7 @@
 		return ( blank + this ).substring( this.length );
 	}
 	Object.prototype.extend = function(sup){
-		this.__super = sup;
+		this.prototype.__super = sup;
 		var proto = {}
 		for( let prop of sup.prototype.getIterator() ){
 			proto[ prop ] = sup.prototype[ prop ];
@@ -87,7 +87,7 @@
 			proto[ prop ] = this.prototype[ prop ];
 		}
 		this.prototype = proto;
-		this.constructor = this;
+		this.prototype.constructor = this;
 	}
 
 }))

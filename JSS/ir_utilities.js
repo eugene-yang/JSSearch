@@ -23,8 +23,14 @@
 	//--------------- Basic Event Object ---------------------
 	JSSU.Eventable = function(){
 		this.__event__stack__ = {};
+		this.__event__parent__ = null;
 	}
 	JSSU.Eventable.prototype = {
+		addEventChild: function(child){
+			if( child.__proto__.__super === JSSU.Eventable ){
+				child.__event__parent__ = this;
+			}
+		},
 		on: function(event, callback){
 			this.__event__stack__[event] = this.__event__stack__[event] || [];
 			this.__event__stack__[event].push( callback );
@@ -39,11 +45,23 @@
 			}
 		},
 		fire: function(event, arg){
-			if( !!this.__event__stack__[event] ){
-				for( let handler of this.__event__stack__[event] ){
-					!!handler && handler.call(this, arg);
+			var eveObj = {
+				event: event,
+				target: this
+			};
+			this.__dispatch( eveObj, arg )
+		},
+		__dispatch: function(eveObj, arg){
+			var goPropagate = true;
+			eveObj.stopPropagation = function(){ goPropagate = false; }
+
+			if( !!this.__event__stack__[eveObj.event] ){
+				for( let handler of this.__event__stack__[eveObj.event] ){
+					!!handler && handler.call(this, eveObj, arg );
 				}
 			}
+			if( goPropagate && !!this.__event__parent__ )
+				this.__event__parent__.__dispatch(eveObj, arg);
 		}
 	}
 
@@ -78,13 +96,13 @@
 			this.bufferManagerList.push(managerInstance);
 			var pool = this, 
 				ind = this.bufferManagerList.length - 1;
-			managerInstance.on("flush", function(num){
+			managerInstance.on("flush", function(event, num){
 				pool.decrement(ind, num);
 			});
 			managerInstance.on("push", function(){
 				pool.increment(ind, 1);
 			})
-			managerInstance.on("read", function(num){
+			managerInstance.on("read", function(event, num){
 				pool.increment(ind, num);
 			})
 			return ind;
@@ -399,8 +417,11 @@
 
 
 	JSSU.DocumentSet = function(){
+		
 		this.set = {};
 		this._count = 0;
+
+		JSSU.Eventable.call(this);
 	}
 	JSSU.DocumentSet.prototype = {
 		addDocument: function(doc){
@@ -408,9 +429,6 @@
 				throw new TypeError("Should be JSSU.Document")
 			this.set[ doc.Id ] = doc;
 			this._count++;
-		},
-		getIterator: function*(){
-			yield* this.set.getIterator();
 		},
 		toInvertedIndex: function(){
 			// drop document temp files along merging
@@ -433,8 +451,14 @@
 				HashTable: indexHT,
 				PostingList: combinedIndex
 			}
+		},
+		getIterator: function*(){
+			if( this.set )
+				yield* this.set.getIterator();
 		}
 	}
+	//JSSU.DocumentSet.extend( JSSU.Eventable );
+
 	Object.defineProperties(JSSU.DocumentSet.prototype, {
 		length: { get: function(){ return this._count; } }
 	})
@@ -935,5 +959,30 @@
 	// For initialize running framework to let script can run in a full
 	// initialized environment.
 
-	 return JSSU;
+	JSSU.RunningContainer = function(config, callList){
+		JSSU.Eventable.call(this);
+
+		this.config = config || {};
+		this.DocumentSet = new JSSU.DocumentSet();
+
+		this.addEventChild( this.DocumentSet );
+
+		this.callList = callList || []
+	}
+	JSSU.RunningContainer.prototype = {
+		__callDeep: function(pointer, preResult){
+			if( pointer + 1 < this.callList.length ){
+				return this.__callDeep(pointer+1, this.callList[pointer](preResult) )
+			}
+			else {
+				return this.callList[pointer](preResult);
+			}
+		},
+		run: function(arg){
+			return this.__callDeep(0, arg);
+		}
+	}
+	JSSU.RunningContainer.extend( JSSU.Eventable );
+
+	return JSSU;
 }))
