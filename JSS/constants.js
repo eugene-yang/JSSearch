@@ -80,12 +80,18 @@
 	Object.prototype.extend = function(sup){
 		this.prototype.__super = sup;
 		var proto = {}
-		for( let prop of sup.prototype.getIterator() ){
-			proto[ prop ] = sup.prototype[ prop ];
+
+		for(var prop in sup.prototype) {
+			if( sup.prototype.hasOwnProperty(prop) ) {
+				proto[ prop ] = sup.prototype[ prop ];
+			}
 		}
-		for( let prop of this.prototype.getIterator() ){
-			proto[ prop ] = this.prototype[ prop ];
+		for(var prop in this.prototype) {
+			if( this.prototype.hasOwnProperty(prop) ) {
+				proto[ prop ] = this.prototype[ prop ];
+			}
 		}
+
 		this.prototype = proto;
 		this.prototype.constructor = this;
 	}

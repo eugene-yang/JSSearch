@@ -417,11 +417,10 @@
 
 
 	JSSU.DocumentSet = function(){
-		
+		JSSU.Eventable.call(this);
+
 		this.set = {};
 		this._count = 0;
-
-		JSSU.Eventable.call(this);
 	}
 	JSSU.DocumentSet.prototype = {
 		addDocument: function(doc){
@@ -453,11 +452,10 @@
 			}
 		},
 		getIterator: function*(){
-			if( this.set )
 				yield* this.set.getIterator();
 		}
 	}
-	//JSSU.DocumentSet.extend( JSSU.Eventable );
+	JSSU.DocumentSet.extend( JSSU.Eventable );
 
 	Object.defineProperties(JSSU.DocumentSet.prototype, {
 		length: { get: function(){ return this._count; } }
