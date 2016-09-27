@@ -30,15 +30,45 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
 var Doca = new JSSU.Document({
 	id: 1,
-	string: "Google.com is really a good htc site and a good and good"
+	string: "Google.com is really a good htc site and a good and good consider to be nice"
 })
 Doca.createIndex()
+
 var Docb = new JSSU.Document({
 	id: 2,
-	string: "I have a google glass and a HTC Vive"
+	string: "I have a google glass and a HTC Vive consideration is good"
 })
 Docb.createIndex()
 
+// log( Doca.bufferManager.get(0) );
+// log( Docb.bufferManager.get(0) );
+// log( Doca.bufferManager.writebufferList )
+// log( Doca.bufferManager.readbufferList )
+// log( Doca.bufferManager.get(10) );
+
+var Docc = new JSSU.Document({
+	id: 3,
+	string: "aaaaaa bbbbbbbbbbbbbb i-20 a considers"
+})
+Docc.createIndex()
+var Docd = new JSSU.Document({
+	id: 4,
+	string: "bbcc aaaaaa considered"
+})
+Docd.createIndex()
+
 var Inda = new JSSU.IndexedList( Doca.Id, Doca ),
-	Indb = new JSSU.IndexedList( Docb.Id, Docb );
-JSSU.IndexedList.Merge( Inda, Indb ).finalize();
+	Indb = new JSSU.IndexedList( Docb.Id, Docb ),
+	Indc = new JSSU.IndexedList( Docc.Id, Docc ),
+	Indd = new JSSU.IndexedList( Docd.Id, Docd );
+
+
+var ivin = JSSU.IndexedList.Merge( Inda, Indb, Indc, Indd );
+ivin.finalize();
+// log( JSSU.BufferPoolManager.entryCount )
+// log( ivin.bufferManager.writebufferList )
+// log( ivin.bufferManager.readbufferList )
+// log( ivin.bufferManager.length );
+// log( ivin.bufferManager.inMemoryFirstIndex )
+// log( ivin.bufferManager.get(17) );
+

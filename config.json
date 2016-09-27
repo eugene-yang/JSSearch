@@ -1,9 +1,12 @@
 {
-	"memory_limit": 1000,
-	"default_flush_bunch": 100,
+	"memory_limit": 1,
+	"default_flush_bunch": 1,
 	"temp_directory": "./_tmp/",
-	"preserve_temp_files": false,
+	"stop_word_list": "./_data/stops.txt",
+	"preserve_temp_files": true,
 	"index_output_directory": "./",
 	"inverted_index_type": "single",
-	"default_index_with_position": false
+	"default_index_with_position": false,
+	"exclude_stop_words": true,
+	"apply_stemmer": false
 }

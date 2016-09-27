@@ -19,6 +19,7 @@
   "license": "CC-BY-NC-SA-4.0",
   "dependencies": {
     "cheerio": "^0.22.0",
-    "md5": "^2.2.1"
+    "md5": "^2.2.1",
+    "stemmer": "^1.0.0"
   }
 }

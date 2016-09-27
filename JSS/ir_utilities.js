@@ -1,18 +1,18 @@
 (function(root, factory){
 	if (typeof define === 'function' && define.amd) {
 		// for require js
-		define(['exports', 'JSSConst', "md5"], function(exports, JSSConst, md5) {
-			root.JSSU = factory(root, JSSConst, null, md5, exports);
+		define(['exports', 'JSSConst', "stemmer", "md5"], function(exports, JSSConst, stemmer, md5) {
+			root.JSSU = factory(root, JSSConst, null, stemmer, md5, exports);
 		});
 	} else if (typeof exports !== 'undefined') {
 		// for node js environment
 		var JSSConst = require("./constants.js");
-		factory(root, JSSConst, require("fs"), require("md5"), module.exports);
+		factory(root, JSSConst, require("fs"), require("stemmer"), require("md5"), module.exports);
 	} else {
 		// for browser
-		root.JSSU = factory(root, root.JSSConst, null, root.md5, {});
+		root.JSSU = factory(root, root.JSSConst, null, stemmer, root.md5, {});
 	}
-}(this, function(root, JSSConst, fs, md5, JSSU){
+}(this, function(root, JSSConst, fs, porterStemmer, md5, JSSU){
 	JSSU = JSSU || {};
 
 	JSSU.Const = JSSConst;
@@ -20,7 +20,7 @@
 	// for debug
 	var log = obj => console.log(JSON.stringify(obj, null, 2))
 
-	// Basic Event Object
+	//--------------- Basic Event Object ---------------------
 	JSSU.Eventable = function(){
 		this.__event__stack__ = {};
 	}
@@ -427,8 +427,8 @@
 			var combinedIndex = JSSU.IndexedList.Merge( l );
 			var indexHT = new JSSU.IndexHashTable( combinedIndex );
 			indexHT.calculate();
-			indexHT.finalize();
-			combinedIndex.finalize();
+			// indexHT.finalize();
+			// combinedIndex.finalize();
 			return {
 				HashTable: indexHT,
 				PostingList: combinedIndex
@@ -716,6 +716,25 @@
 		}
 	}
 
+	// Maintain a true filter only if we want to exclude stop words
+	// return true if the word is not on stop list
+	if( JSSConst.GetConfig("exclude_stop_words") ){
+		// load stop words
+		var _stopList = fs.readFileSync( JSSConst.GetConfig("stop_word_list"), "utf8" ).split("\n");
+		JSSU.stopFilter = (word) => { return _stopList.indexOf(word) == -1 }
+	}
+	else {
+		JSSU.stopFilter = () => true;
+	}
+
+	// Maintain true stemmer if we want to use it
+	if( JSSConst.GetConfig("apply_stemmer") ){
+		JSSU.stemmer = (word) => { return porterStemmer(word) }
+	}
+	else {
+		JSSU.stemmer = (word) => word;
+	}
+
 	/** 
 	 * Factory Function of tokenizer
 	 * @param  {orignal text}
@@ -734,6 +753,8 @@
 	JSSU.DefaultTokenizer = function(txt){
 		this.txt = txt.replace(/[\n\r|\n|\n\r]+/g, " ").toLowerCase();
 		this.tokens = { word: {}, rule: {}, terms: {} };
+
+		this.useStemmer = JSSConst.GetConfig("apply_stemmer");
 	}
 	JSSU.DefaultTokenizer.prototype = {
 		_increment: function(target, list){
@@ -892,9 +913,9 @@
 				// mix.push({ word: elem.replace("-",""), pos: [match.index, match.index + elem.length - 1] });
 				parts = elem.split("-")
 				if( parts[0].length >= 3 )
-					mix.push( { word: parts[0], pos: [match.index, match.index + parts[0].length - 1] } )
+					mix.push( { word: JSSU.stemmer(parts[0]), pos: [match.index, match.index + parts[0].length - 1] } )
 				if( parts[1].length >= 3 )
-					mix.push( { word: parts[1], pos: [match.index + parts[0].length, match.index + elem.length - 1] } )
+					mix.push( { word: JSSU.stemmer(parts[1]), pos: [match.index + parts[0].length, match.index + elem.length - 1] } )
 
 			}
 			return mix;
@@ -903,7 +924,8 @@
 			var res = [],
 				revisedText = this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ");
 			while( (match = JSSConst.RE.GeneralWord.exec(revisedText)) != null ){
-				res.push({word: match[0], pos: [match.index, match.index + match[0].length -1 ]})
+				if( JSSU.stopFilter(match[0]) )
+					res.push({word: JSSU.stemmer(match[0]), pos: [match.index, match.index + match[0].length -1 ]})
 			}
 			return res;
 		}
