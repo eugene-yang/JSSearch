@@ -427,7 +427,10 @@
 			if( !( doc instanceof JSSU.Document ) )
 				throw new TypeError("Should be JSSU.Document")
 			this.set[ doc.Id ] = doc;
+			this.addEventChild( doc );
 			this._count++;
+
+			this.fire("documentAdded", doc);
 		},
 		toInvertedIndex: function(){
 			// drop document temp files along merging
@@ -441,18 +444,22 @@
 			// these along merging
 			this.set = {};
 
+			this.fire("mergingStarted", this.length);
 			var combinedIndex = JSSU.IndexedList.Merge( l );
+			this.fire("mergingDone");
+
+			
 			var indexHT = new JSSU.IndexHashTable( combinedIndex );
 			indexHT.calculate();
-			// indexHT.finalize();
-			// combinedIndex.finalize();
+			
+
 			return {
 				HashTable: indexHT,
 				PostingList: combinedIndex
 			}
 		},
 		getIterator: function*(){
-				yield* this.set.getIterator();
+			yield* this.set.getIterator();
 		}
 	}
 	JSSU.DocumentSet.extend( JSSU.Eventable );
@@ -462,6 +469,8 @@
 	})
 
 	JSSU.IndexedList = function(Id, target, config){
+		JSSU.Eventable.call(this);
+
 		// target accept both null or document instance
 		target = target || null;
 
@@ -537,9 +546,11 @@
 	}
 	JSSU.IndexedList.prototype = {
 		finalize: function(){
+			this.fire("finalizingStarted");
 			this.bufferManager.flushAll();
 			this.bufferManager.toRealFile( 
 				JSSConst.GetConfig("index_output_directory") + JSSConst.GetConfig("inverted_index_type") + "." + this.ext );
+			this.fire("finalizingDone");
 		},
 		destroy: function(){
 			this.bufferManager.destroy();
@@ -549,6 +560,7 @@
 		},
 		push: function(obj){
 			this.bufferManager.push(obj);
+			this.fire("itemAdded", obj);
 		},
 		createIteratorByIndex: function(ind){
 			return this.bufferManager.getIteratorFromIndex(ind);
@@ -557,6 +569,7 @@
 			return this.bufferManager.getIteratorFromOffset( offset );
 		}
 	}
+	JSSU.IndexedList.extend( JSSU.Eventable );
 	Object.defineProperties(JSSU.IndexedList.prototype, {
 		schemaLength: {
 			get: function(){ return this.bufferManager.schema.length; }
@@ -564,6 +577,8 @@
 	})
 
 	JSSU.IndexHashTable = function(combinedIndex){
+		JSSU.Eventable.call(this);
+
 		this.combinedIndex = combinedIndex;
 		this.bufferManager = new JSSU.BufferManager( "indexHT",  JSSConst.IndexSchema.HashTable );
 		this.ext = "index";
@@ -576,6 +591,8 @@
 				currentType = null,
 				currentTerm = null,
 				dfCounter = 0;
+
+			this.fire("buildHashTableStarted")
 			for( let item of this.combinedIndex.createIterator() ){
 				if( currentType == null || item.Type != currentType || item.Term != currentTerm ){
 					if( currentType != null ){ // push
@@ -595,6 +612,7 @@
 				dfCounter++;
 				counter++;
 			}
+			this.fire("buildHashTableDone")
 		},
 		getPostingIteratorByOffset: function*(offset){
 			var It = this.combinedIndex.createIteratorByOffset(offset);
@@ -619,8 +637,11 @@
 		}
 	}
 	JSSU.IndexHashTable.extend( JSSU.IndexedList );
+	JSSU.IndexHashTable.extend( JSSU.Eventable );
 
 	JSSU.Document = function(id, string, config){
+		JSSU.Eventable.call(this);
+
 		if( typeof(id) === "object" ){
 			var string = id.string,
 				config = id.config,
@@ -671,6 +692,7 @@
 			this.bufferManager.flushAll();
 		}
 	}
+	JSSU.Document.extend( JSSU.Eventable );
 	Object.defineProperties(JSSU.Document.prototype, {
 		Id: { get: function(){return this.getId();} }
 	});
@@ -965,22 +987,36 @@
 
 		this.addEventChild( this.DocumentSet );
 
-		this.callList = callList || []
+		this.callList = callList || [];
+		this.__terminated__ = false
 	}
 	JSSU.RunningContainer.prototype = {
 		__callDeep: function(pointer, preResult){
+			if( this.__terminated__ )
+				return false;
+
+			this.fire("invokeCallFunction", 
+				{index: pointer, name: this.callList[pointer].name, instance: this.callList[pointer]})
 			if( pointer + 1 < this.callList.length ){
-				return this.__callDeep(pointer+1, this.callList[pointer](preResult) )
+				return this.__callDeep(pointer+1, this.callList[pointer].call(this,preResult) )
 			}
 			else {
-				return this.callList[pointer](preResult);
+				return this.callList[pointer].call(this, preResult);
 			}
 		},
 		run: function(arg){
 			return this.__callDeep(0, arg);
+		},
+		terminate: function(){
+			this.__terminated__ = true;
 		}
 	}
 	JSSU.RunningContainer.extend( JSSU.Eventable );
+
+	JSSU.createRunningContainer = function(config, callList){
+		// function version of creating RunningContainer
+		return new JSSU.RunningContainer(config, callList);
+	}
 
 	return JSSU;
 }))

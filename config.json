@@ -1,6 +1,6 @@
 {
-	"memory_limit": 1,
-	"default_flush_bunch": 1,
+	"memory_limit": 1000,
+	"default_flush_bunch": 500,
 	"temp_directory": "./_tmp/",
 	"stop_word_list": "./_data/stops.txt",
 	"preserve_temp_files": true,
