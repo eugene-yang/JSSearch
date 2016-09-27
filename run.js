@@ -7,7 +7,7 @@ var log = function(obj){ console.log(typeof(obj) == "string" ? obj : JSON.string
 var fileDir = "_data/BigSample/";
 
 var executFlag = 0;
-console.time("Runtime");
+console.time("Read time");
 
 // var fn = "fr940810.0";
 
@@ -43,10 +43,19 @@ fs.readdirSync(fileDir).forEach(function(fn){
 
 })
 
-log( "Start building index" )
-Documents.toInvertedIndex()
+console.timeEnd("Read time");
 
-console.timeEnd("Runtime");
+console.time("Merging time");
+
+log( "Start building index" )
+var invertedIndex = Documents.toInvertedIndex()
+console.timeEnd("Merging time");
+
+console.time("Flush time")
+invertedIndex.HashTable.finalize();
+invertedIndex.PostingList.finalize();
+console.timeEnd("Flush time")
+
 
 
 
