@@ -519,8 +519,8 @@
 	}
 	JSSU.IndexedList.MergePair =  function(lista, listb){
 		var newList = new JSSU.IndexedList( md5( lista.Id + listb.Id ) ),
-			Ita = lista.createIterator(), a = Ita.next(),
-			Itb = listb.createIterator(), b = Itb.next(),
+			Ita = lista.getIterator(), a = Ita.next(),
+			Itb = listb.getIterator(), b = Itb.next(),
 			movea = function(){ 
 				newList.push(a.value); a = Ita.next(); 
 			},
@@ -565,18 +565,36 @@
 		destroy: function(){
 			this.bufferManager.destroy();
 		},
-		createIterator: function*(){
+		getIterator: function*(){
 			yield* this.bufferManager.getIteratorFromHead();
 		},
 		push: function(obj){
 			this.bufferManager.push(obj);
 			this.fire("itemAdded", obj);
 		},
-		createIteratorByIndex: function(ind){
-			return this.bufferManager.getIteratorFromIndex(ind);
+		getIteratorByIndex: function*(ind, withSameWord){
+			if( !withSameWord )
+				yield* this.bufferManager.getIteratorFromIndex( ind );
+			else{
+				yield* this._iterateWithinSameWord( this.bufferManager.getIteratorFromIndex( ind ) );	
+			}
 		},
-		createIteratorByOffset: function(offset){
-			return this.bufferManager.getIteratorFromOffset( offset );
+		getIteratorByOffset: function*(offset, withSameWord){
+			// default withSameWord is false
+			if( !withSameWord )
+				yield* this.bufferManager.getIteratorFromOffset( offset );
+			else{
+				yield* this._iterateWithinSameWord( this.bufferManager.getIteratorFromOffset( offset ) );			
+			}
+		},
+		_iterateWithinSameWord: function*(it){
+			var headItem = it.next().value;
+			yield headItem;
+			for( let item of it ){
+				if( item.Type != headItem.Type || item.Term != headItem.Term )
+					break;
+				yield item;
+			}
 		}
 	}
 	JSSU.IndexedList.extend( JSSU.Eventable );
@@ -593,23 +611,24 @@
 		this.bufferManager = new JSSU.BufferManager( "indexHT",  JSSConst.IndexSchema.HashTable );
 		this.ext = "index";
 		this.hashTable = {};
+		this.hashedEntryCounter = 0;
 	}
 	JSSU.IndexHashTable.prototype = {
 		calculate: function(){
 			var counter = 0;
-			var postingHead = null,
+			var postingHead = 0,
 				currentType = null,
-				currentTerm = null,
-				dfCounter = 0;
+				currentTerm = null
+				//dfCounter = 0;
 
 			this.fire("buildHashTableStarted")
-			for( let item of this.combinedIndex.createIterator() ){
-				if( currentType == null || item.Type != currentType || item.Term != currentTerm ){
-					if( currentType != null ){ // push
+			for( let item of this.combinedIndex.getIterator() ){
+				if( item.Type !== currentType || item.Term !== currentTerm ){
+					if( counter > 0 ){ // push
 						this.push({
 							Type: currentType,
 							Term: currentTerm,
-							DocFreq: dfCounter,
+							DocFreq: counter - postingHead,
 							PostingPointer: postingHead * this.combinedIndex.schemaLength
 						})
 					}
@@ -617,22 +636,12 @@
 					postingHead = counter;
 					currentType = item.Type;
 					currentTerm = item.Term;
-					dfCounter = 0;
+					//dfCounter = 0;
 				}
-				dfCounter++;
+				//dfCounter++;
 				counter++;
 			}
 			this.fire("buildHashTableDone")
-		},
-		getPostingIteratorByOffset: function*(offset){
-			var It = this.combinedIndex.createIteratorByOffset(offset);
-			var opItem = It.next().value;
-			yield opItem;
-			for( let item of It ){
-				if( item.Type != opItem.Type || item.Term != opItem.Term )
-					break;
-				yield item;
-			}
 		},
 		load: function(){
 			// load all entries into memory, if still under memory constraint,
@@ -640,10 +649,53 @@
 			
 			// without memory constraint version
 			this.hashTable = {};
-			for( let item of this.createIterator() ){
+			this.hashedEntryCounter = 0;
+			for( let item of this.getIterator() ){
 				this.hashTable[ item.Type ] = this.hashTable[ item.Type ] || {};
 				this.hashTable[ item.Type ][ item.Term ] = item;
+				this.hashedEntryCounter++;
 			}
+		},
+		getPostingListIteratorByOffset: function*(offset){
+			yield* this.combinedIndex.getIteratorByOffset( offset, true )
+		},
+		findTerm: function(term, withPosting, type){
+			var found = null
+			if( this.hashedEntryCounter > 0 ){
+				// by hash table
+				if( type === undefined )
+					found = this.hashTable['word'][ term ];
+				else {
+					found = this.hashTable[type][term] || this.hashTable['word'][ term ];
+				}
+			}
+			else {
+				// by sequential search
+				for( let item of this.getIterator() ){
+					if( item.Type == type && item.Term == term){
+						found = item;
+						break;
+					}
+					else if( type === undefined && item.Type == "word" && item.Term == term ){
+						found = item;
+						break;
+					}
+				}
+			}
+
+			if( found != null ){
+				if( withPosting === true ){
+					// get posting list
+					found.Posting = [...this.getPostingListIteratorByOffset( found.PostingPointer )];
+				}
+				else {
+					delete found.Posting;
+				}
+				return found;
+			}
+		},
+		get: function(ind){
+			return this.bufferManager.get(ind);
 		}
 	}
 	JSSU.IndexHashTable.extend( JSSU.IndexedList );

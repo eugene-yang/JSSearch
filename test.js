@@ -28,43 +28,16 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 // 	Count: 12
 // }) )
 
-var Doca = new JSSU.Document({
-	id: 1,
-	string: "Google.com is really a good htc site and a good and good consider to be nice"
-})
-Doca.createIndex()
-
-var Docb = new JSSU.Document({
-	id: 2,
-	string: "I have a google glass and a HTC Vive consideration is good"
-})
-Docb.createIndex()
-
-// log( Doca.bufferManager.get(0) );
-// log( Docb.bufferManager.get(0) );
-// log( Doca.bufferManager.writebufferList )
-// log( Doca.bufferManager.readbufferList )
-// log( Doca.bufferManager.get(10) );
-
-var Docc = new JSSU.Document({
-	id: 3,
-	string: "aaaaaa bbbbbbbbbbbbbb i-20 a considers"
-})
-Docc.createIndex()
-var Docd = new JSSU.Document({
-	id: 4,
-	string: "bbcc aaaaaa considered"
-})
-Docd.createIndex()
-
-var Inda = new JSSU.IndexedList( Doca.Id, Doca ),
-	Indb = new JSSU.IndexedList( Docb.Id, Docb ),
-	Indc = new JSSU.IndexedList( Docc.Id, Docc ),
-	Indd = new JSSU.IndexedList( Docd.Id, Docd );
 
 
-var ivin = JSSU.IndexedList.Merge( Inda, Indb, Indc, Indd );
-ivin.finalize();
+// var Inda = new JSSU.IndexedList( Doca.Id, Doca ),
+// 	Indb = new JSSU.IndexedList( Docb.Id, Docb ),
+// 	Indc = new JSSU.IndexedList( Docc.Id, Docc ),
+// 	Indd = new JSSU.IndexedList( Docd.Id, Docd );
+
+
+// var ivin = JSSU.IndexedList.Merge( Inda, Indb, Indc, Indd );
+// ivin.finalize();
 // log( JSSU.BufferPoolManager.entryCount )
 // log( ivin.bufferManager.writebufferList )
 // log( ivin.bufferManager.readbufferList )
@@ -72,3 +45,51 @@ ivin.finalize();
 // log( ivin.bufferManager.inMemoryFirstIndex )
 // log( ivin.bufferManager.get(17) );
 
+module.exports = JSSU.createRunningContainer({},[
+	function loadDocuments(fnList){
+		var Doca = new JSSU.Document({
+			id: 1,
+			string: "Google.com is really a good htc site and a good and good consider to be nice"
+		})
+		Doca.createIndex()
+		this.DocumentSet.addDocument(Doca)
+
+		var Docb = new JSSU.Document({
+			id: 2,
+			string: "I have a google glass and a HTC Vive consideration is good"
+		})
+		Docb.createIndex()
+		this.DocumentSet.addDocument(Docb)
+
+		var Docc = new JSSU.Document({
+			id: 3,
+			string: "aaaaaa bbbbbbbbbbbbbb i-20 a considers"
+		})
+		Docc.createIndex()
+		this.DocumentSet.addDocument(Docc)
+
+		var Docd = new JSSU.Document({
+			id: 4,
+			string: "bbcc aaaaaa considered"
+		})
+		Docd.createIndex()
+		this.DocumentSet.addDocument(Docd)
+	},
+	function buildInvertedIndex(){
+		console.time("Merging time");
+
+		log( "Start building index" )
+		var invertedIndex = this.DocumentSet.toInvertedIndex()
+		this.IndexHashTable = invertedIndex.HashTable;
+		this.PostingList = invertedIndex.PostingList;
+		this.addEventChild( this.IndexHashTable );
+		this.addEventChild( this.PostingList );
+		console.timeEnd("Merging time");
+	},
+	function FlushToDisk(){
+		console.time("Flush time")
+		this.IndexHashTable.finalize();
+		this.PostingList.finalize();
+		console.timeEnd("Flush time")
+	}
+])
