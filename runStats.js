@@ -17,7 +17,7 @@ for( let ml of memoryLimitList ){
 	output.setConfig({
 		memory: {
 			memoryLimit: ml,
-			flushBunch: ml * 0.2
+			flushBunch: 66 * 4 // about 4 blocks(4K)
 		}
 	})
 	// runtime timers are embedded in the container
@@ -45,4 +45,7 @@ for( let ml of memoryLimitList ){
 	stats.mean = stats.mean / list.length;
 	log( "df Stats" )
 	log( stats );
+
+	// clean up container
+	output.destroy();
 }

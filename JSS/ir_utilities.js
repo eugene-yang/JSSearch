@@ -88,13 +88,8 @@
 		bufferManagerList: [],
 		entryCount: 0,
 		initialize: function(config){
-			// clear temp files
-			try{ var files = fs.readdirSync( this.tempDir ) }
-			catch( e ){ return false; }
-			files.forEach(function(fn){
-				if( fn.split(".")[1] == "tmp" )
-					fs.unlinkSync( this.tempDir + "/" + fn );
-			})
+			this.clean();
+
 			this.bufferManager = [];
 			this.flushPointer = 0;
 			this.entryCount = 0;
@@ -108,6 +103,21 @@
 		clean: function(){
 			// clean up all temp files by calling destruct method of each buffer manager
 			// and delete if from bufferList, and call global.gc if it exists to collect garbage
+			 
+			// close all exist buffer manager
+			for( let manager of this.bufferManagerList ){
+				manager && manager.destroy && manager.destroy();
+			}
+
+			var tempDir = this.tempDir;
+			try{ var files = fs.readdirSync( tempDir ) }
+			catch( e ){ return false; }
+			files.forEach(function(fn){
+				if( fn.split(".")[1] == "tmp" )
+					fs.unlinkSync( tempDir + "/" + fn );
+			})
+
+			global.gc && global.gc();
 		},
 		addManager: function(managerInstance){
 			this.bufferManagerList.push(managerInstance);
@@ -438,23 +448,26 @@
 	});
 
 	// create global buffer manager instance for position list file
-	JSSU.PositionListBufferManager = new JSSU.BufferManager({
-		id: JSSConst.GetConfig("inverted_index_type"),
-		schema: null,
-		type: "varchar",
-		ext: "position"
-	})
-	JSSU.PositionListBufferManager.createString = function(positionList){
-		return positionList.join(",");
-	}
-	JSSU.PositionListBufferManager.parseString = function(string){
-		var rawList = string.split(",");
-		var ret = [];
-		while(rawList.length > 0){
-			ret.push( [ parseInt(rawList.shift()), parseInt(rawList.shift()) ] );
+	function createPositionListBufferManager(){
+		JSSU.PositionListBufferManager = new JSSU.BufferManager({
+			id: JSSConst.GetConfig("inverted_index_type"),
+			schema: null,
+			type: "varchar",
+			ext: "position"
+		})
+		JSSU.PositionListBufferManager.createString = function(positionList){
+			return positionList.join(",");
 		}
-		return ret;
+		JSSU.PositionListBufferManager.parseString = function(string){
+			var rawList = string.split(",");
+			var ret = [];
+			while(rawList.length > 0){
+				ret.push( [ parseInt(rawList.shift()), parseInt(rawList.shift()) ] );
+			}
+			return ret;
+		}
 	}
+	createPositionListBufferManager();
 
 	//---------------------- High Level Interface -----------------------
 
@@ -1109,7 +1122,12 @@
 	}
 	JSSU.RunningContainer.prototype = {
 		__init: function(){
+			createPositionListBufferManager();
 			JSSU.BufferPoolManager.initialize(this.config.memory || null);
+		},
+		destroy: function(){
+			JSSU.PositionListBufferManager.destroy();
+			JSSU.BufferPoolManager.clean();
 		},
 		__callDeep: function(pointer, preResult){
 			if( this.__terminated__ )

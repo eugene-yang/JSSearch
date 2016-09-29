@@ -13,7 +13,7 @@ module.exports = JSSU.createRunningContainer({
 	fileDir: "_data/BigSample/"
 },[
 	function startTotalTimer(){
-		log( "Memory Limit: " + JSSU.Const.GetConfig("memory_limit") )
+		log( "Memory Limit: " + JSSU.BufferPoolManager.maxMemoryEntry )
 
 		console.time("Total runtime")
 	},
