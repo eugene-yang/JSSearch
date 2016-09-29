@@ -7,7 +7,7 @@
 	"preserve_temp_files": false,
 	"index_output_directory": "./",
 	"inverted_index_type": "single",
-	"default_index_with_position": true,
+	"default_index_with_position": false,
 	"exclude_stop_words": true,
 	"apply_stemmer": false
 }

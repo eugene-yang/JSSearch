@@ -7,13 +7,16 @@ var fs = require('fs'),
 	cheerio = require('cheerio'),
 	JSSU = require('./JSS/ir_utilities.js');
 
-// basic settings
 var log = function(obj){ console.log(typeof(obj) == "string" ? obj : JSON.stringify(obj, null, 2)) }
-var fileDir = "_data/BigSample/";
 
 module.exports = JSSU.createRunningContainer({
 	fileDir: "_data/BigSample/"
 },[
+	function startTotalTimer(){
+		log( "Memory Limit: " + JSSU.Const.GetConfig("memory_limit") )
+
+		console.time("Total runtime")
+	},
 	function getDocFileNames(){
 		// load file names in the data directory
 		return fs.readdirSync(this.config.fileDir);
@@ -25,7 +28,7 @@ module.exports = JSSU.createRunningContainer({
 		for( let fn of fnList ){
 			var data = fs.readFileSync( this.config.fileDir + fn, 'utf8' );
 
-			log( "Handling " + fn );
+			// log( "Handling " + fn );
 
 			// remove special chars
 			JSSU.Const.SpecialChars.forEach(function(pair){
@@ -41,7 +44,7 @@ module.exports = JSSU.createRunningContainer({
 				_Container.DocumentSet.addDocument( Doc );
 				Doc.createIndex();
 			})
-			log( "Finish " + fn );
+			// log( "Finish " + fn );
 		}
 
 		console.timeEnd("Read time");
@@ -58,5 +61,8 @@ module.exports = JSSU.createRunningContainer({
 		console.time("Flush time")
 		this.IndexHashTable.finalize();
 		console.timeEnd("Flush time")
+	},
+	function stopTotalTimer(){
+		console.timeEnd("Total runtime")
 	}
 ])

@@ -87,7 +87,7 @@
 		flushPointer: 0, // perform round-robin
 		bufferManagerList: [],
 		entryCount: 0,
-		initialize: function(){
+		initialize: function(config){
 			// clear temp files
 			try{ var files = fs.readdirSync( this.tempDir ) }
 			catch( e ){ return false; }
@@ -98,6 +98,12 @@
 			this.bufferManager = [];
 			this.flushPointer = 0;
 			this.entryCount = 0;
+
+			// read customized config
+			if( config && typeof(config) === "object"){
+				this.maxMemoryEntry = config.memoryLimit || this.maxMemoryEntry;
+				this.flushBunch = config.flushBunch || this.flushBunch;
+			}
 		},
 		clean: function(){
 			// clean up all temp files by calling destruct method of each buffer manager
@@ -740,6 +746,9 @@
 				}
 			}
 		},
+		getIterator: function*(){
+			yield* this.bufferManager.getIteratorFromHead();
+		},
 		get: function(ind){
 			return this.bufferManager.get(ind);
 		}
@@ -1099,6 +1108,9 @@
 		this.__terminated__ = false
 	}
 	JSSU.RunningContainer.prototype = {
+		__init: function(){
+			JSSU.BufferPoolManager.initialize(this.config.memory || null);
+		},
 		__callDeep: function(pointer, preResult){
 			if( this.__terminated__ )
 				return false;
@@ -1112,7 +1124,13 @@
 				return this.callList[pointer].call(this, preResult);
 			}
 		},
+		setConfig: function(config){
+			for( let key of config.getIterator() ){
+				this.config[key] = config[key]
+			}
+		},
 		run: function(arg){
+			this.__init();
 			return this.__callDeep(0, arg);
 		},
 		terminate: function(){
