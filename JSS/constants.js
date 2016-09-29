@@ -72,11 +72,6 @@
 			}
 		}
 	}
-	String.prototype.fixLength = function(len){
-		var blank = ""
-		for( var i=0; i<len;i++ ){ blank += " " }
-		return ( blank + this ).substring( this.length );
-	}
 	Object.prototype.extend = function(sup){
 		this.prototype.__super = sup;
 		var proto = {}
@@ -94,6 +89,14 @@
 
 		this.prototype = proto;
 		this.prototype.constructor = this;
+	}
+	String.prototype.fixLength = function(len){
+		var blank = ""
+		for( var i=0; i<len;i++ ){ blank += " " }
+		return ( blank + this ).substring( this.length );
+	}
+	String.prototype.have = function(substring){
+		return this.indexOf( substring ) > -1;
 	}
 
 }))

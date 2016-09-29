@@ -201,6 +201,7 @@
 			this.inMemoryOffset = 0;
 			this.inMemoryString = "";
 			this.separator = JSSConst.VarCharSeparator;
+			this.defaultReadChunck = JSSConst.GetConfig("default_varchar_read_chunck");
 		}
 
 		// destruction settings
@@ -242,12 +243,16 @@
 			JSSU.BufferPoolManager.requestSpace(num);
 		},
 		_write: function(str, offset, callback){
-			if( this.FD == 6 ) debugger;
 			if( offset )
 				fs.writeSync( this.FD, str, offset, "utf8" );
 			else{
 				fs.writeSync( this.FD, str );
 			}
+		},
+		_read: function(offset, len){
+			var buf = new Buffer( len );
+			fs.readSync( this.FD, buf, 0, len, offset );	
+			return buf.toString();
 		},
 		pin: function(){
 			this.pinned = true;
@@ -282,7 +287,7 @@
 				this.inMemoryFirstIndex += num;
 			}
 			if( this.type == "varchar" ){
-				this._write( this.inMemoryString.substring(0, num) );
+				this._write( this.inMemoryString.substring(0, num), this.inMemoryFirstIndex );
 				this.inMemoryString = this.inMemoryString.slice(num);
 				this.inMemoryOffset += num;
 			}
@@ -360,7 +365,19 @@
 
 			return this.length - str.length;
 		},
-		fetch: function(offset){}
+		fetch: function(offset){
+			if( this.type != "varchar" )
+				throw new TypeError("Called fetch when BufferManager is not set as varchar")
+
+			var str = "";
+			while( true ){
+				str += this._read( offset, this.defaultReadChunck );
+				if( str.have( this.separator ) ){
+					str = str.split( this.separator )[0];
+					return str;
+				}
+			}
+		}
 	}
 	JSSU.BufferManager.extend( JSSU.Eventable );
 	Object.defineProperties(JSSU.BufferManager.prototype, {
@@ -395,6 +412,7 @@
 		create: function(obj){
 			var str = "";
 			for( let col of this.schema ){
+				if( obj[col.name] === 0 ) obj[col.name] = "0";
 				str += ("" + ( obj[col.name] || "" )).fixLength( col.length );
 			}
 			return str;
@@ -414,14 +432,22 @@
 	});
 
 	// create global buffer manager instance for position list file
-	var PositionListBufferManager = new JSSU.BufferManager({
+	JSSU.PositionListBufferManager = new JSSU.BufferManager({
 		id: JSSConst.GetConfig("inverted_index_type"),
 		schema: null,
 		type: "varchar",
 		ext: "position"
 	})
-	PositionListBufferManager.createString = function(positionList){
+	JSSU.PositionListBufferManager.createString = function(positionList){
 		return positionList.join(",");
+	}
+	JSSU.PositionListBufferManager.parseString = function(string){
+		var rawList = string.split(",");
+		var ret = [];
+		while(rawList.length > 0){
+			ret.push( [ parseInt(rawList.shift()), parseInt(rawList.shift()) ] );
+		}
+		return ret;
 	}
 
 	//---------------------- High Level Interface -----------------------
@@ -463,10 +489,7 @@
 			var indexHT = new JSSU.IndexHashTable( combinedIndex );
 			indexHT.calculate();
 			
-			return {
-				HashTable: indexHT,
-				PostingList: combinedIndex
-			}
+			return indexHT;
 		},
 		getIterator: function*(){
 			yield* this.set.getIterator();
@@ -557,6 +580,7 @@
 	JSSU.IndexedList.prototype = {
 		finalize: function(){
 			this.fire("finalizingStarted");
+			if( this.combinedIndex ) this.combinedIndex.finalize();
 			this.bufferManager.flushAll();
 			this.bufferManager.toRealFile( 
 				JSSConst.GetConfig("index_output_directory") + JSSConst.GetConfig("inverted_index_type") + "." + this.ext );
@@ -572,23 +596,30 @@
 			this.bufferManager.push(obj);
 			this.fire("itemAdded", obj);
 		},
-		getIteratorByIndex: function*(ind, withSameWord){
+		getIteratorByIndex: function*(ind, withSameWord, validation){
 			if( !withSameWord )
 				yield* this.bufferManager.getIteratorFromIndex( ind );
 			else{
-				yield* this._iterateWithinSameWord( this.bufferManager.getIteratorFromIndex( ind ) );	
+				yield* this._iterateWithinSameWord( this.bufferManager.getIteratorFromIndex( ind ), validation );	
 			}
 		},
-		getIteratorByOffset: function*(offset, withSameWord){
+		getIteratorByOffset: function*(offset, withSameWord, validation){
 			// default withSameWord is false
 			if( !withSameWord )
 				yield* this.bufferManager.getIteratorFromOffset( offset );
 			else{
-				yield* this._iterateWithinSameWord( this.bufferManager.getIteratorFromOffset( offset ) );			
+				yield* this._iterateWithinSameWord( this.bufferManager.getIteratorFromOffset( offset ), validation );			
 			}
 		},
-		_iterateWithinSameWord: function*(it){
-			var headItem = it.next().value;
+		_iterateWithinSameWord: function*(it, validation){
+			var headItem = it.next();
+			for( var i=0; i<10 && !headItem.done && headItem.value.Term != validation; i++ ){
+				headItem = it.next();
+				log( headItem.value.Term );
+				log( validation )
+				log( headItem.value.Term != validation );
+			}
+			headItem = headItem.value;
 			yield headItem;
 			for( let item of it ){
 				if( item.Type != headItem.Type || item.Term != headItem.Term )
@@ -625,6 +656,7 @@
 			for( let item of this.combinedIndex.getIterator() ){
 				if( item.Type !== currentType || item.Term !== currentTerm ){
 					if( counter > 0 ){ // push
+						if( isNaN(postingHead * this.combinedIndex.schemaLength) )debugger;
 						this.push({
 							Type: currentType,
 							Term: currentTerm,
@@ -656,8 +688,8 @@
 				this.hashedEntryCounter++;
 			}
 		},
-		getPostingListIteratorByOffset: function*(offset){
-			yield* this.combinedIndex.getIteratorByOffset( offset, true )
+		getPostingListIteratorByOffset: function*(offset, validation){
+			yield* this.combinedIndex.getIteratorByOffset( offset, true, validation )
 		},
 		findTerm: function(term, withPosting, type){
 			var found = null
@@ -686,12 +718,26 @@
 			if( found != null ){
 				if( withPosting === true ){
 					// get posting list
-					found.Posting = [...this.getPostingListIteratorByOffset( found.PostingPointer )];
+					found.Posting = [...this.getPostingListIteratorByOffset( found.PostingPointer, found.Term )];
 				}
 				else {
 					delete found.Posting;
 				}
 				return found;
+			}
+		},
+		getPositionListByOffset: function(offset){
+			return JSSU.PositionListBufferManager.parseString( JSSU.PositionListBufferManager.fetch(offset) )
+		},
+		getPositionListByTermDocument: function(term, documentId, type){
+			var termNode = this.findTerm(term, true, type);
+			if( termNode === null ) return null;
+			for( var i=0; i<termNode.Posting.length; i++ ){
+				if( termNode.Posting[i].DocumentId === documentId ){
+					if( !termNode.Posting[i].PositionPointer )
+						return null;
+					return this.getPositionListByOffset( termNode.Posting[i].PositionPointer )
+				}
 			}
 		},
 		get: function(ind){
@@ -739,7 +785,7 @@
 			for( let item of tokenList ){
 				// write posting list
 				if( this.config.tokenPosition )
-					var postPointer = PositionListBufferManager.write( PositionListBufferManager.createString(item.post) )
+					var postPointer = JSSU.PositionListBufferManager.write( JSSU.PositionListBufferManager.createString(item.post) )
 				// write entry
 				this.bufferManager.push({
 					"DocumentId": this.Id,

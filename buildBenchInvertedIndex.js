@@ -50,17 +50,13 @@ module.exports = JSSU.createRunningContainer({
 		console.time("Merging time");
 
 		log( "Start building index" )
-		var invertedIndex = this.DocumentSet.toInvertedIndex()
-		this.IndexHashTable = invertedIndex.HashTable;
-		this.PostingList = invertedIndex.PostingList;
+		this.IndexHashTable = this.DocumentSet.toInvertedIndex()
 		this.addEventChild( this.IndexHashTable );
-		this.addEventChild( this.PostingList );
 		console.timeEnd("Merging time");
 	},
 	function FlushToDisk(){
 		console.time("Flush time")
 		this.IndexHashTable.finalize();
-		this.PostingList.finalize();
 		console.timeEnd("Flush time")
 	}
 ])
