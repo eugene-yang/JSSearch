@@ -8,13 +8,13 @@
 	"index_output_directory": "./",
 	"inverted_index_type": "single",
 
-	"parse_single_term": true,
+	"parse_single_term": false,
 	"exclude_stop_words": true,
 	"apply_stemmer": false,
 
-	"parse_phrase": false,
+	"parse_phrase": true,
 	"phrase_accept_lenth": [2,3],
-	"parse_special_tokens": true,
+	"parse_special_tokens": false,
 
 	"default_index_with_position": false
 }

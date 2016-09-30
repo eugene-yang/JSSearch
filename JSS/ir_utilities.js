@@ -693,6 +693,13 @@
 				//dfCounter++;
 				counter++;
 			}
+			// push the last one
+			this.push({
+				Type: currentType,
+				Term: currentTerm,
+				DocFreq: counter - postingHead,
+				PostingPointer: postingHead * this.combinedIndex.schemaLength
+			})
 			this.fire("buildHashTableDone")
 		},
 		load: function(){
@@ -929,15 +936,13 @@
 	 */
 	JSSU.tokenize = function(txt, type, callback){
 		// TODO: add more different type of tokenizer
-		var tokens = {};
 		switch(type){
 			default:
-				tokens = (new JSSU.DefaultTokenizer(txt)).run(callback);
+				(new JSSU.DefaultTokenizer(txt)).run(callback);
 		}
-		return tokens;
 	}
 	JSSU.DefaultTokenizer = function(txt){
-		this.txt = txt.replace(/[\n\r|\n|\n\r]+/g, " ").toLowerCase();
+		this.txt = txt.replace(/[\n\r|\n|\n\r]+/g, " ");
 		this.tokens = { word: {}, rule: {}, phrase: {} };
 	}
 	JSSU.DefaultTokenizer.prototype = {
@@ -974,17 +979,24 @@
 		},
 		run: function(callback){
 			// run all type identifiers in proper sequence
+			
+			var _this = this
+			var counter = new JSSU.DoneCounter(function(){
+				callback && callback(_this.tokens);
+			})
 
 			// asynchronized methods
 			var _this = this;
 			if( JSSConst.GetConfig("parse_phrase") ){
+				counter.add()
 				this.parsePhrase(function(res){
 					_this._addPosition(_this.tokens.phrase, res);
-					callback && callback(this.tokens);
+					counter.check();
 				})
 			}
 
 			// synchronized methods
+			counter.add();
 			if( JSSConst.GetConfig("parse_special_tokens") ) {
 				// case f: Date
 				this.tokens.rule.date = this.parseDate();
@@ -1003,15 +1015,15 @@
 
 			}
 
-			if( JSSConst.GetConfig("parse_single_term") || JSSU.IndexedList.GetConfig("apply_stemmer") ){
+			if( JSSConst.GetConfig("parse_single_term") || JSSConst.GetConfig("apply_stemmer") ){
 				// case a and general word parser
 				this._addPosition(this.tokens.word, this.parseGeneralWord());
 			}
 
-			callback && callback(this.tokens);
+			counter.check();
 
-			// depreciated
-			return this.tokens;	
+			counter.noMore();
+
 		},
 		parseURL: function(){
 			eatSet = new JSSU.eatSet();
@@ -1019,7 +1031,7 @@
 				URL: {},
 				protocol: {}, server: {}
 			}
-			while( (match=JSSConst.RE.URL.general.exec(this.txt)) != null ){
+			while( (match=JSSConst.RE.URL.general.exec(this.txt.toLowerCase())) != null ){
 				url = match[0];
 				this._addPosition(res.URL, url, [match.index, match.index + url.length - 1]);
 				while( (p = JSSConst.RE.URL.Protocol.exec(url) ) !== null ){
@@ -1057,7 +1069,7 @@
 		parseEmail: function(){
 			var res = { address: {}, username: {}, server: {} },
 				eatSet = new JSSU.eatSet();
-			while( (match = JSSConst.RE.Email.exec(this.txt)) != null ){
+			while( (match = JSSConst.RE.Email.exec(this.txt.toLowerCase())) != null ){
 				add = match[0];
 				this._addPosition( res.address, add, match );
 				sp = add.split("@");
@@ -1071,7 +1083,7 @@
 		parseFileExtension: function(){
 			var res = {},
 				eatSet = new JSSU.eatSet();
-			while( (match = JSSConst.RE.FileExtension.exec(this.txt)) != null ){
+			while( (match = JSSConst.RE.FileExtension.exec(this.txt.toLowerCase())) != null ){
 				var fn = match[0].split(".");
 				this._addPosition( res, fn[1], [match.index + fn[0].length, match.index + match[0].length - 1 ] )
 				eatSet.push( match )
@@ -1094,7 +1106,7 @@
 		parseDate: function(){
 			var res = {},
 				eatSet = new JSSU.eatSet();
-			while( (match = JSSConst.RE.Date.exec(this.txt)) != null ){
+			while( (match = JSSConst.RE.Date.exec(this.txt.toLowerCase())) != null ){
 				dat = match[0];
 				(/\d\s?(st|nd|th)/).test(dat) && ( dat = dat.replace(/(st|nd|th)/, "") );
 				if( !isNaN(Date.parse(dat)) ){
@@ -1111,7 +1123,7 @@
 			var rawTerms = this.txt.match( JSSConst.RE.Hyphenated ) || [],
 				mix = [];
 
-			while( (match = JSSConst.RE.Hyphenated.exec(this.txt)) != null ){
+			while( (match = JSSConst.RE.Hyphenated.exec(this.txt.toLowerCase())) != null ){
 				elem = match[0];
 				// mix.push({ word: elem.replace("-",""), pos: [match.index, match.index + elem.length - 1] });
 				parts = elem.split("-")
@@ -1125,7 +1137,7 @@
 		},
 		parseGeneralWord: function(){
 			var res = [],
-				revisedText = this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ");
+				revisedText = this.txt.toLowerCase().replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ");
 			while( (match = JSSConst.RE.GeneralWord.exec(revisedText)) != null ){
 				if( JSSU.stopFilter(match[0]) )
 					res.push({word: JSSU.stemmer(match[0]), pos: [match.index, match.index + match[0].length -1 ]})
@@ -1139,11 +1151,11 @@
 				for( var i=0; i<tagList.length; i++ ){
 					for( let [key, val] of tagList[i] ){
 						for( let token of val ){
-							if( !(token.split(" ").length in JSSConst.GetConfig("phrase_accept_lenth")) )
+							if( JSSConst.GetConfig("phrase_accept_lenth").indexOf( token.split(" ").length ) == -1	 )
 								continue;
 
 							var subString = _this.txt;
-							while( subString.length < token.length || subString.indexOf( token ) > -1 ){
+							while( subString.length >= token.length && subString.indexOf( token ) > -1 ){
 								res.push({word: token, pos: [ subString.indexOf( token ), subString.indexOf( token )+token.length-1 ]})
 								subString = subString.substring( subString.indexOf( token ) + token.length );
 							}
@@ -1198,7 +1210,7 @@
 			JSSU.BufferPoolManager.initialize(this.config.memory || null);
 
 			JSSU.NER && JSSU.NER.exit();
-			//JSSU.NER = new Stanford.NER();
+			JSSU.NER = new Stanford.NER();
 		},
 		destroy: function(){
 			JSSU.PositionListBufferManager.destroy();
@@ -1220,7 +1232,7 @@
 					currentResult.then(function(data){
 						_this.__callDeep(pointer+1, data )
 					}, function(err){
-						//log(err);
+						console.error(err);
 					})
 				}
 				else {
