@@ -20,6 +20,8 @@
   "dependencies": {
     "cheerio": "^0.22.0",
     "md5": "^2.2.1",
+    "request": "^2.75.0",
+    "stanford-ner": "^1.0.0",
     "stemmer": "^1.0.0"
   }
 }

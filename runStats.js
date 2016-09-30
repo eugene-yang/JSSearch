@@ -6,7 +6,7 @@ var fs = require("fs");
 
 var log = function(obj){ console.log(typeof(obj) == "string" ? obj : JSON.stringify(obj, null, 2)) }
 
-var memoryLimitList = [Infinity, 1000, 10000, 100000]
+var memoryLimitList = [100000, 10000, 1000, Infinity]
 
 for( let ml of memoryLimitList ){
 	log( "--------------------------------------------------------" )

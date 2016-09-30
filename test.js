@@ -47,49 +47,64 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
 module.exports = JSSU.createRunningContainer({},[
 	function loadDocuments(fnList){
-		var Doca = new JSSU.Document({
-			id: 1,
-			string: "Google.com is really a good htc site and a good and good consider to be nice"
-		})
-		Doca.createIndex()
-		this.DocumentSet.addDocument(Doca)
+		return this.async(function(resolve,reject){
+			var counter = this.createCounter(function(){
+				log("resolve")
+				resolve();
+			})
 
-		var Docb = new JSSU.Document({
-			id: 2,
-			string: "I have a google glass and a HTC Vive consideration is good"
-		})
-		Docb.createIndex()
-		this.DocumentSet.addDocument(Docb)
+			counter.add();
+			var Doca = new JSSU.Document({
+				id: 1,
+				string: "Google.com is really a good htc site and a good and good consider to be nice"
+			})
+			this.DocumentSet.addDocument(Doca)
+			Doca.createIndex(function(){counter.check()})
+			
+			counter.add();
+			var Docb = new JSSU.Document({
+				id: 2,
+				string: "I have a google glass and a HTC Vive consideration is good google"
+			})
+			this.DocumentSet.addDocument(Docb)
+			Docb.createIndex(function(){counter.check()})
+			
 
-		var Docc = new JSSU.Document({
-			id: 3,
-			string: "aaaaaa bbbbbbbbbbbbbb i-20 a considers"
-		})
-		Docc.createIndex()
-		this.DocumentSet.addDocument(Docc)
+			counter.add();
+			var Docc = new JSSU.Document({
+				id: 3,
+				string: "New York is a really nice place, better then San Francisco."
+			})
+			this.DocumentSet.addDocument(Docc)
+			Docc.createIndex(function(){counter.check()})
 
-		var Docd = new JSSU.Document({
-			id: 4,
-			string: "bbcc aaaaaa considered"
+
+			counter.add();
+			var Docd = new JSSU.Document({
+				id: 4,
+				string: "bbcc aaaaaa considered"
+			})
+			this.DocumentSet.addDocument(Docd)
+			Docd.createIndex(function(){counter.check()})
+			
+
+			counter.noMore()
 		})
-		Docd.createIndex()
-		this.DocumentSet.addDocument(Docd)
 	},
 	function buildInvertedIndex(){
 		console.time("Merging time");
 
 		log( "Start building index" )
-		var invertedIndex = this.DocumentSet.toInvertedIndex()
-		this.IndexHashTable = invertedIndex.HashTable;
-		this.PostingList = invertedIndex.PostingList;
+		this.IndexHashTable = this.DocumentSet.toInvertedIndex()
 		this.addEventChild( this.IndexHashTable );
-		this.addEventChild( this.PostingList );
 		console.timeEnd("Merging time");
 	},
 	function FlushToDisk(){
 		console.time("Flush time")
 		this.IndexHashTable.finalize();
-		this.PostingList.finalize();
 		console.timeEnd("Flush time")
+	},
+	function stopTotalTimer(){
+		console.timeEnd("Total runtime")
 	}
-])
+]).run();

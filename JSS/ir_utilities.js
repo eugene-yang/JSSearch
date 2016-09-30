@@ -1,18 +1,19 @@
 (function(root, factory){
 	if (typeof define === 'function' && define.amd) {
 		// for require js
-		define(['exports', 'JSSConst', "stemmer", "md5"], function(exports, JSSConst, stemmer, md5) {
-			root.JSSU = factory(root, JSSConst, null, stemmer, md5, exports);
+		// Stanford = require("stanford-ner");
+		define(['exports', 'JSSConst', "stemmer", "stanford-ner","md5"], function(exports, JSSConst, stemmer, Stanford, md5) {
+			root.JSSU = factory(root, JSSConst, null, stemmer, Stanford, md5, exports);
 		});
 	} else if (typeof exports !== 'undefined') {
 		// for node js environment
 		var JSSConst = require("./constants.js");
-		factory(root, JSSConst, require("fs"), require("stemmer"), require("md5"), module.exports);
+		factory(root, JSSConst, require("fs"), require("stemmer"), require("stanford-ner"),require("md5"), module.exports);
 	} else {
 		// for browser
-		root.JSSU = factory(root, root.JSSConst, null, stemmer, root.md5, {});
+		root.JSSU = factory(root, root.JSSConst, null, stemmer, Stanford, root.md5, {});
 	}
-}(this, function(root, JSSConst, fs, porterStemmer, md5, JSSU){
+}(this, function(root, JSSConst, fs, porterStemmer, Stanford, md5, JSSU){
 	JSSU = JSSU || {};
 
 	JSSU.Const = JSSConst;
@@ -28,7 +29,7 @@
 	}
 	JSSU.Eventable.prototype = {
 		addEventChild: function(child){
-			if( child.__proto__.__super === JSSU.Eventable ){
+			if( child && child.__proto__.__super === JSSU.Eventable ){
 				child.__event__parent__ = this;
 			}
 		},
@@ -791,32 +792,36 @@
 
 	}
 	JSSU.Document.prototype = {
-		createIndex: function(){
+		createIndex: function(callback){
 			// this will recursively call String object to perform tokenization
-			var tokenList = [...this.String.getFlatIterator()];
+			var _this = this;
+			this.String.getFlatList(function(tokenList){
 
-			tokenList.sort(function(a,b){
-				if( a.type == b.type ){
-					var ta = a.term.length > 32 ? md5( a.term ) : a.term,
-						tb = b.term.length > 32 ? md5( b.term ) : b.term;
-					return (ta < tb)*(-1) + 0.5;
-				}
-				return (a.type < b.type)*(-1) + 0.5;
-			})
-
-			for( let item of tokenList ){
-				// write posting list
-				if( this.config.tokenPosition )
-					var postPointer = JSSU.PositionListBufferManager.write( JSSU.PositionListBufferManager.createString(item.post) )
-				// write entry
-				this.bufferManager.push({
-					"DocumentId": this.Id,
-					"Type": item.type,
-					"Term": item.term.length > 32 ? md5(item.term) : item.term,
-					"TermFreq": item.post.length,
-					"PositionPointer": postPointer
+				tokenList.sort(function(a,b){
+					if( a.type == b.type ){
+						var ta = a.term.length > 32 ? md5( a.term ) : a.term,
+							tb = b.term.length > 32 ? md5( b.term ) : b.term;
+						return (ta < tb)*(-1) + 0.5;
+					}
+					return (a.type < b.type)*(-1) + 0.5;
 				})
-			}
+
+				for( let item of tokenList ){
+					// write posting list
+					if( _this.config.tokenPosition )
+						var postPointer = JSSU.PositionListBufferManager.write( JSSU.PositionListBufferManager.createString(item.post) )
+					// write entry
+					_this.bufferManager.push({
+						"DocumentId": _this.Id,
+						"Type": item.type,
+						"Term": item.term.length > 32 ? md5(item.term) : item.term,
+						"TermFreq": item.post.length,
+						"PositionPointer": postPointer
+					})
+				}
+
+				callback && callback();
+			})
 		},
 		flushAll: function(){
 			this.bufferManager.flushAll();
@@ -837,13 +842,23 @@
 		this._cache = {};
 	}
 	JSSU.String.prototype = {
-		tokenize: function(){
+		tokenize: function(callback){
+			var _this = this;
 			if( typeof this._cache.token === 'undefined' )
-				this._cache.token = JSSU.tokenize(this.text, this.config.tokenType)
+				this._cache.token = JSSU.tokenize(this.text, this.config.tokenType, function(token){
+					_this._cache.token = token
+					callback && callback( _this._cache.token );
+				})
 			return this._cache.token;
 		},
-		getFlatIterator: function*(obj, type){
-			obj = obj || this.token;
+		getFlatList: function(callback){
+			var _this = this;
+			this.tokenize(function(token){
+				callback && callback( [..._this._getFlatIterator(token)] )
+			})
+		},
+		_getFlatIterator: function*(obj, type){
+			obj = obj;
 			type = type || "null"
 			for( let item of obj.getIterator() ){
 				if( obj[item] instanceof Array ){
@@ -854,7 +869,7 @@
 					}
 				}
 				else{
-					yield* this.getFlatIterator( obj[item], item );
+					yield* this._getFlatIterator( obj[item], item );
 				}
 			}
 		}
@@ -862,9 +877,6 @@
 	Object.defineProperties(JSSU.String.prototype, {
 		text: {
 			get: function(){ return this.getRawText(); }
-		},
-		token: {
-			get: function(){ return this.tokenize(); }
 		}
 	})
 
@@ -915,20 +927,18 @@
 	 * @param  {type of tokenizer}
 	 * @return {array of string token}
 	 */
-	JSSU.tokenize = function(txt, type){
+	JSSU.tokenize = function(txt, type, callback){
 		// TODO: add more different type of tokenizer
 		var tokens = {};
 		switch(type){
 			default:
-				tokens = (new JSSU.DefaultTokenizer(txt)).run();
+				tokens = (new JSSU.DefaultTokenizer(txt)).run(callback);
 		}
 		return tokens;
 	}
 	JSSU.DefaultTokenizer = function(txt){
 		this.txt = txt.replace(/[\n\r|\n|\n\r]+/g, " ").toLowerCase();
-		this.tokens = { word: {}, rule: {}, terms: {} };
-
-		this.useStemmer = JSSConst.GetConfig("apply_stemmer");
+		this.tokens = { word: {}, rule: {}, phrase: {} };
 	}
 	JSSU.DefaultTokenizer.prototype = {
 		_increment: function(target, list){
@@ -962,26 +972,45 @@
 			//this.txt = this.txt.substr(0, start) + this.txt.substr( start + leng - 1 );
 			//this.txt = eatSet.getRemain(this.txt);
 		},
-		run: function(){
+		run: function(callback){
 			// run all type identifiers in proper sequence
 
-			// case f: Date
-			this.tokens.rule.date = this.parseDate();
-			// case j: IP addresses
-			this.tokens.rule.ip = this.parseIP();
-			// case g: Number
-			this.tokens.rule.number = this.parseNumber();
-			// case i: Email
-			this.tokens.rule.email = this.parseEmail();
-			// case h: File Extension : don't eat
-			this.tokens.rule.exts = this.parseFileExtension();
-			// case k: URL
-			this.tokens.rule.url = this.parseURL();
-			// case c,d,e: Hyphenated terms
-			this._addPosition(this.tokens.word, this.parseHyphenatedTerms());
-			// case a and general word parser
-			this._addPosition(this.tokens.word, this.parseGeneralWord());
+			// asynchronized methods
+			var _this = this;
+			if( JSSConst.GetConfig("parse_phrase") ){
+				this.parsePhrase(function(res){
+					_this._addPosition(_this.tokens.phrase, res);
+					callback && callback(this.tokens);
+				})
+			}
 
+			// synchronized methods
+			if( JSSConst.GetConfig("parse_special_tokens") ) {
+				// case f: Date
+				this.tokens.rule.date = this.parseDate();
+				// case j: IP addresses
+				this.tokens.rule.ip = this.parseIP();
+				// case g: Number
+				this.tokens.rule.number = this.parseNumber();
+				// case i: Email
+				this.tokens.rule.email = this.parseEmail();
+				// case h: File Extension : don't eat
+				this.tokens.rule.exts = this.parseFileExtension();
+				// case k: URL
+				this.tokens.rule.url = this.parseURL();
+				// case c,d,e: Hyphenated terms
+				this._addPosition(this.tokens.word, this.parseHyphenatedTerms());
+
+			}
+
+			if( JSSConst.GetConfig("parse_single_term") || JSSU.IndexedList.GetConfig("apply_stemmer") ){
+				// case a and general word parser
+				this._addPosition(this.tokens.word, this.parseGeneralWord());
+			}
+
+			callback && callback(this.tokens);
+
+			// depreciated
 			return this.tokens;	
 		},
 		parseURL: function(){
@@ -1102,12 +1131,55 @@
 					res.push({word: JSSU.stemmer(match[0]), pos: [match.index, match.index + match[0].length -1 ]})
 			}
 			return res;
+		},
+		parsePhrase: function(callback){
+			var _this = this;
+			JSSU.NER.getEntities(this.txt).then(function(tagList){
+				var res = [];
+				for( var i=0; i<tagList.length; i++ ){
+					for( let [key, val] of tagList[i] ){
+						for( let token of val ){
+							if( !(token.split(" ").length in JSSConst.GetConfig("phrase_accept_lenth")) )
+								continue;
+
+							var subString = _this.txt;
+							while( subString.length < token.length || subString.indexOf( token ) > -1 ){
+								res.push({word: token, pos: [ subString.indexOf( token ), subString.indexOf( token )+token.length-1 ]})
+								subString = subString.substring( subString.indexOf( token ) + token.length );
+							}
+						}
+					}
+				}
+				callback && callback(res)
+			})
 		}
 	}
 
 	// -------------------- Running Container -------------------------
 	// For initialize running framework to let script can run in a full
 	// initialized environment.
+	
+	JSSU.DoneCounter = function(whenDone, closure){
+		this._counter = 0;
+		this.whenDone = whenDone;
+		this._savedClosure = closure;
+		this.stillAdding = true;
+	}
+	JSSU.DoneCounter.prototype = {
+		add: function(){ this._counter++; },
+		noMore: function(){
+			this.stillAdding = false;
+			this._realCheck()
+		},
+		check: function(){
+			this._counter--;
+			this._realCheck()
+		},
+		_realCheck: function(){
+			if( this._counter == 0 && !this.stillAdding )
+				this.whenDone.call(this._savedClosure);
+		}
+	}
 
 	JSSU.RunningContainer = function(config, callList){
 		JSSU.Eventable.call(this);
@@ -1124,10 +1196,14 @@
 		__init: function(){
 			createPositionListBufferManager();
 			JSSU.BufferPoolManager.initialize(this.config.memory || null);
+
+			JSSU.NER && JSSU.NER.exit();
+			//JSSU.NER = new Stanford.NER();
 		},
 		destroy: function(){
 			JSSU.PositionListBufferManager.destroy();
 			JSSU.BufferPoolManager.clean();
+			JSSU.NER && JSSU.NER.exit();
 		},
 		__callDeep: function(pointer, preResult){
 			if( this.__terminated__ )
@@ -1135,11 +1211,24 @@
 
 			this.fire("invokeCallFunction", 
 				{index: pointer, name: this.callList[pointer].name, instance: this.callList[pointer]})
+
+			var _this = this;
+			var currentResult = this.callList[pointer].call(this,preResult);
+
 			if( pointer + 1 < this.callList.length ){
-				return this.__callDeep(pointer+1, this.callList[pointer].call(this,preResult) )
+				if( currentResult instanceof Promise ){
+					currentResult.then(function(data){
+						_this.__callDeep(pointer+1, data )
+					}, function(err){
+						log(err);
+					})
+				}
+				else {
+					return this.__callDeep(pointer+1, currentResult )
+				}
 			}
 			else {
-				return this.callList[pointer].call(this, preResult);
+				return currentResult;
 			}
 		},
 		setConfig: function(config){
@@ -1147,9 +1236,19 @@
 				this.config[key] = config[key]
 			}
 		},
+		async: function(runnable){
+			var _this = this;
+			return new Promise(function(resolve, reject){
+				runnable.call(_this, resolve, reject);
+			},function(reason){
+				throw Error(reason);
+			})
+		},
+		createCounter: function(callback){ return new JSSU.DoneCounter(callback, this) },
 		run: function(arg){
 			this.__init();
-			return this.__callDeep(0, arg);
+			this.result = this.__callDeep(0, arg);
+			return this;
 		},
 		terminate: function(){
 			this.__terminated__ = true;

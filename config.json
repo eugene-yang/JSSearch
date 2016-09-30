@@ -1,13 +1,20 @@
 {
-	"memory_limit": -1,
-	"default_flush_bunch": 100,
+	"memory_limit": 1,
+	"default_flush_bunch": 1,
 	"default_varchar_read_chunck": 100,
 	"temp_directory": "./_tmp/",
 	"stop_word_list": "./_data/stops.txt",
-	"preserve_temp_files": false,
+	"preserve_temp_files": true,
 	"index_output_directory": "./",
 	"inverted_index_type": "single",
-	"default_index_with_position": false,
+
+	"parse_single_term": true,
 	"exclude_stop_words": true,
-	"apply_stemmer": false
+	"apply_stemmer": false,
+
+	"parse_phrase": false,
+	"phrase_accept_lenth": [2,3],
+	"parse_special_tokens": false,
+
+	"default_index_with_position": false
 }
