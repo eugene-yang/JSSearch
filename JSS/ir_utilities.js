@@ -1220,7 +1220,7 @@
 					currentResult.then(function(data){
 						_this.__callDeep(pointer+1, data )
 					}, function(err){
-						log(err);
+						//log(err);
 					})
 				}
 				else {

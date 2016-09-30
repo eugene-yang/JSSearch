@@ -24,30 +24,40 @@ module.exports = JSSU.createRunningContainer({
 	function loadDocuments(fnList){
 		console.time("Read time");
 
-		var _Container = this;
-		for( let fn of fnList ){
-			var data = fs.readFileSync( this.config.fileDir + fn, 'utf8' );
-
-			// log( "Handling " + fn );
-
-			// remove special chars
-			JSSU.Const.SpecialChars.forEach(function(pair){
-				data = data.replace(pair[0], pair[1]);
+		return this.async(function(resolve,reject){
+			var counter = this.createCounter(function(){
+				console.timeEnd("Read time");
+				resolve();
 			})
-			var $ = cheerio.load(data);
-			$('DOC').each(function(){
-				var Doc = new JSSU.Document({
-					id: $(this).find('DOCNO').text().replace(/\s/g, ""),
-					string: $(this).find('TEXT').text()
+
+			var _Container = this;
+			for( let fn of fnList ){
+				var data = fs.readFileSync( this.config.fileDir + fn, 'utf8' );
+
+				// log( "Handling " + fn );
+
+				// remove special chars
+				JSSU.Const.SpecialChars.forEach(function(pair){
+					data = data.replace(pair[0], pair[1]);
 				})
+				var $ = cheerio.load(data);
+				$('DOC').each(function(){
+					var Doc = new JSSU.Document({
+						id: $(this).find('DOCNO').text().replace(/\s/g, ""),
+						string: $(this).find('TEXT').text()
+					})
 
-				_Container.DocumentSet.addDocument( Doc );
-				Doc.createIndex();
-			})
-			// log( "Finish " + fn );
-		}
+					counter.add();
+					_Container.DocumentSet.addDocument( Doc );
+					Doc.createIndex(function(){ counter.check() });
+				})
+				// log( "Finish " + fn );
+			}
 
-		console.timeEnd("Read time");
+			counter.noMore()
+		})
+
+		
 	},
 	function buildInvertedIndex(){
 		console.time("Merging time");

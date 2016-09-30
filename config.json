@@ -1,10 +1,10 @@
 {
-	"memory_limit": 1,
+	"memory_limit": -1,
 	"default_flush_bunch": 1,
 	"default_varchar_read_chunck": 100,
 	"temp_directory": "./_tmp/",
 	"stop_word_list": "./_data/stops.txt",
-	"preserve_temp_files": true,
+	"preserve_temp_files": false,
 	"index_output_directory": "./",
 	"inverted_index_type": "single",
 
