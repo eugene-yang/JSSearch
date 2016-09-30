@@ -56,7 +56,7 @@ module.exports = JSSU.createRunningContainer({},[
 			counter.add();
 			var Doca = new JSSU.Document({
 				id: 1,
-				string: "Google.com is really a good htc site and a good and good consider to be nice"
+				string: "Google.com at San Jose near San Francisco is really a good htc site and a good and good consider to be nice"
 			})
 			this.DocumentSet.addDocument(Doca)
 			Doca.createIndex(function(){counter.check()})
@@ -82,7 +82,7 @@ module.exports = JSSU.createRunningContainer({},[
 			counter.add();
 			var Docd = new JSSU.Document({
 				id: 4,
-				string: "bbcc aaaaaa considered"
+				string: "bbcc aaaaaa considered United States of America China Taiwan Japan"
 			})
 			this.DocumentSet.addDocument(Docd)
 			Docd.createIndex(function(){counter.check()})

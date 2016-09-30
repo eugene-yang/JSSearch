@@ -6,7 +6,7 @@
 	"stop_word_list": "./_data/stops.txt",
 	"preserve_temp_files": false,
 	"index_output_directory": "./",
-	"inverted_index_type": "single",
+	"inverted_index_type": "phrase",
 
 	"parse_single_term": false,
 	"exclude_stop_words": true,
