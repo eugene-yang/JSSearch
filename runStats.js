@@ -6,22 +6,23 @@ var fs = require("fs");
 
 var log = function(obj){ console.log(typeof(obj) == "string" ? obj : JSON.stringify(obj, null, 2)) }
 
-var memoryLimitList = [100000, 10000, 1000, Infinity]
+var ml = parseInt( process.argv[2] );
 
-for( let ml of memoryLimitList ){
-	log( "--------------------------------------------------------" )
-	log( "Memory Limit: " + ml );
+if( ml == -1 || !ml )
+	ml = Infinity;
 
-	// import the container
-	var output = require("./buildBenchInvertedIndex.js");
-	output.setConfig({
-		memory: {
-			memoryLimit: ml,
-			flushBunch: 66 * 4 // about 4 blocks(4K)
-		}
-	})
-	// runtime timers are embedded in the container
-	output.run(); 
+log( "Memory Limit: " + ml );
+
+// import the container
+var output = require("./buildBenchInvertedIndex.js");
+output.setConfig({
+	memory: {
+		memoryLimit: ml,
+		flushBunch: 66 * 4 // about 4 blocks(4K)
+	}
+})
+// runtime timers are embedded in the container
+output.run(function(){ 
 	// Lexicon
 	log( "Lexicon: " + output.IndexHashTable.bufferManager.length );
 	// Index Size
@@ -47,5 +48,7 @@ for( let ml of memoryLimitList ){
 	log( stats );
 
 	// clean up container
-	output.destroy();
-}
+	this.destroy();
+
+});
+

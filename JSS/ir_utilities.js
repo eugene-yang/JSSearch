@@ -1245,7 +1245,15 @@
 			})
 		},
 		createCounter: function(callback){ return new JSSU.DoneCounter(callback, this) },
-		run: function(arg){
+		run: function(arg, callback){
+			if( arg instanceof Function ){
+				callback = arg;
+				delete arg;
+			}
+			if( callback instanceof Function ){
+				this.callList.push( function finalCallback(){ callback.apply(this, arguments) } )
+			}
+
 			this.__init();
 			this.result = this.__callDeep(0, arg);
 			return this;

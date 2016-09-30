@@ -14,7 +14,7 @@
 
 	"parse_phrase": false,
 	"phrase_accept_lenth": [2,3],
-	"parse_special_tokens": false,
+	"parse_special_tokens": true,
 
 	"default_index_with_position": false
 }
