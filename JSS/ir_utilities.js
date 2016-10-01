@@ -1,18 +1,18 @@
 (function(root, factory){
 	if (typeof define === 'function' && define.amd) {
 		// for require js
-		define(['exports', 'JSSConst', "stemmer", "md5"], function(exports, JSSConst, stemmer, md5) {
-			root.JSSU = factory(root, JSSConst, null, stemmer, md5, exports);
+		define(['exports', 'JSSConst', "stemmer", "sha256"], function(exports, JSSConst, stemmer, sha256) {
+			root.JSSU = factory(root, JSSConst, null, stemmer, sha256, exports);
 		});
 	} else if (typeof exports !== 'undefined') {
 		// for node js environment
 		var JSSConst = require("./constants.js");
-		factory(root, JSSConst, require("fs"), require("stemmer"), require("md5"), module.exports);
+		factory(root, JSSConst, require("fs"), require("stemmer"), require("sha256"), module.exports);
 	} else {
 		// for browser
-		root.JSSU = factory(root, root.JSSConst, null, stemmer, root.md5, {});
+		root.JSSU = factory(root, root.JSSConst, null, stemmer, root.sha256, {});
 	}
-}(this, function(root, JSSConst, fs, porterStemmer, md5, JSSU){
+}(this, function(root, JSSConst, fs, porterStemmer, sha256, JSSU){
 	JSSU = JSSU || {};
 
 	JSSU.Const = JSSConst;
@@ -259,6 +259,10 @@
 			JSSU.BufferPoolManager.requestSpace(num);
 		},
 		_write: function(str, offset, callback){
+			// prevent special ascii encoding 
+			// http://stackoverflow.com/questions/150033/regular-expression-to-match-non-english-characters
+			str = str.replace(/[^\x00-\x7F]/ig, "?");
+
 			if( offset )
 				fs.writeSync( this.FD, str, offset, "utf8" );
 			else{
@@ -328,16 +332,13 @@
 			var get = this.writebufferList[ ind ] || this.readbufferList[ ind ];
 			if( !get ){
 				var nextReadCache = ind + 1;
-				for( ; nextReadCache < this.readbufferList.length && this.readbufferList[ nextReadCache ] === undefined; nextReadCache++ ){}
+				for( ; nextReadCache < this.length && this.readbufferList[ nextReadCache ] === undefined; nextReadCache++ ){}
 				
 				var bunch = Math.min( nextReadCache - ind, this.inMemoryFirstIndex - ind, JSSU.BufferPoolManager.flushBunch),
 					schemaLength = this.schema.length;
 				this._requestSpace( bunch );
 				
-				var buf = new Buffer( bunch * schemaLength );
-				fs.readSync( this.FD, buf, 0, bunch * schemaLength, ind * schemaLength );
-				
-				buf = buf.toString();
+				var buf = this._read( ind * schemaLength, bunch * schemaLength )
 				var counter = 0;
 				while( buf.length > 0 ){
 					this.readbufferList[ ind + counter ] = this.schema.parse( buf.substring(0, schemaLength) );
@@ -416,6 +417,7 @@
 	}
 	JSSU.Schema.prototype = {
 		parse: function(string){
+			string = string.replace("\n","");
 			var collect = {};
 			for( let col of this.schema ){
 				collect[ col.name ] = string.substring(0, col.length ).trim();
@@ -431,14 +433,14 @@
 				if( obj[col.name] === 0 ) obj[col.name] = "0";
 				str += ("" + ( obj[col.name] || "" )).fixLength( col.length );
 			}
-			return str;
+			return str + "\n";
 		} 
 	}
 	Object.defineProperties(JSSU.Schema.prototype,{
 		length: { 
 			get: function(){ 
 				if( !!this._len ) return this._len;
-				var len = 0;
+				var len = 1;
 				for( let col of this.schema ){
 					len += col.length;
 				}
@@ -560,7 +562,7 @@
 		return JSSU.IndexedList.Merge( merged );
 	}
 	JSSU.IndexedList.MergePair =  function(lista, listb){
-		var newList = new JSSU.IndexedList( md5( lista.Id + listb.Id ) ),
+		var newList = new JSSU.IndexedList( sha256( lista.Id + listb.Id ) ),
 			Ita = lista.getIterator(), a = Ita.next(),
 			Itb = listb.getIterator(), b = Itb.next(),
 			movea = function(){ 
@@ -699,7 +701,7 @@
 			// then would have to perform sequential access
 			
 			// without memory constraint version
-			this.hashTable = {};
+			this.hashTable = { 'word':{}, 'phrase': {} };
 			this.hashedEntryCounter = 0;
 			for( let item of this.getIterator() ){
 				this.hashTable[ item.Type ] = this.hashTable[ item.Type ] || {};
@@ -715,9 +717,9 @@
 			if( this.hashedEntryCounter > 0 ){
 				// by hash table
 				if( type === undefined )
-					found = this.hashTable['word'][ term ];
+					found = this.hashTable['word'][ term ] || this.hashTable['phrase'][ term ];
 				else {
-					found = this.hashTable[type][term] || this.hashTable['word'][ term ];
+					found = this.hashTable[type][term] || this.hashTable['word'][ term ] || this.hashTable['phrase'][ term ];
 				}
 			}
 			else {
@@ -727,7 +729,7 @@
 						found = item;
 						break;
 					}
-					else if( type === undefined && item.Type == "word" && item.Term == term ){
+					else if( type === undefined && (item.Type == "word" || item.Type == "phrase") && item.Term == term ){
 						found = item;
 						break;
 					}
@@ -797,8 +799,8 @@
 
 			tokenList.sort(function(a,b){
 				if( a.type == b.type ){
-					var ta = a.term.length > 32 ? md5( a.term ) : a.term,
-						tb = b.term.length > 32 ? md5( b.term ) : b.term;
+					var ta = a.term.length > 64 ? sha256( a.term ) : a.term,
+						tb = b.term.length > 64 ? sha256( b.term ) : b.term;
 					return (ta < tb)*(-1) + 0.5;
 				}
 				return (a.type < b.type)*(-1) + 0.5;
@@ -809,14 +811,16 @@
 				if( this.config.tokenPosition )
 					var postPointer = JSSU.PositionListBufferManager.write( JSSU.PositionListBufferManager.createString(item.post) )
 				// write entry
+				if( item.term.length > 64 ) log(item.term.length + ": hashed")
 				this.bufferManager.push({
 					"DocumentId": this.Id,
 					"Type": item.type,
-					"Term": item.term.length > 32 ? md5(item.term) : item.term,
+					"Term": item.term.length > 64 ? sha256(item.term) : item.term,
 					"TermFreq": item.post.length,
 					"PositionPointer": postPointer
 				})
 			}
+			//log( this.bufferManager.writebufferList )
 		},
 		flushAll: function(){
 			this.bufferManager.flushAll();
@@ -892,22 +896,17 @@
 
 	// Maintain a true filter only if we want to exclude stop words
 	// return true if the word is not on stop list
-	if( JSSConst.GetConfig("exclude_stop_words") ){
-		// load stop words
-		var _stopList = fs.readFileSync( JSSConst.GetConfig("stop_word_list"), "utf8" ).split("\n");
+	JSSU.stopFilter = () => true;
+	var _stopList = fs.readFileSync( JSSConst.GetConfig("stop_word_list"), "utf8" ).split("\n");
+	var stopRegExp = new RegExp("\\W((" + _stopList.join("|") + ")\\W)+|("+ ["\\,","\\.","\\!","\\?"].join("|") +")", "ig")
+	if( JSSConst.GetConfig("exclude_stop_words") )
 		JSSU.stopFilter = (word) => { return _stopList.indexOf(word) == -1 }
-	}
-	else {
-		JSSU.stopFilter = () => true;
-	}
 
 	// Maintain true stemmer if we want to use it
-	if( JSSConst.GetConfig("apply_stemmer") ){
+	JSSU.stemmer = (word) => word;
+	if( JSSConst.GetConfig("apply_stemmer") )
 		JSSU.stemmer = (word) => { return porterStemmer(word) }
-	}
-	else {
-		JSSU.stemmer = (word) => word;
-	}
+
 
 	/** 
 	 * Factory Function of tokenizer
@@ -926,7 +925,7 @@
 	}
 	JSSU.DefaultTokenizer = function(txt){
 		this.txt = txt.replace(/[\n\r|\n|\n\r]+/g, " ").toLowerCase();
-		this.tokens = { word: {}, rule: {}, terms: {} };
+		this.tokens = { word: {}, rule: {}, phrase: {} };
 
 		this.useStemmer = JSSConst.GetConfig("apply_stemmer");
 	}
@@ -965,22 +964,32 @@
 		run: function(){
 			// run all type identifiers in proper sequence
 
-			// case f: Date
-			this.tokens.rule.date = this.parseDate();
-			// case j: IP addresses
-			this.tokens.rule.ip = this.parseIP();
-			// case g: Number
-			this.tokens.rule.number = this.parseNumber();
-			// case i: Email
-			this.tokens.rule.email = this.parseEmail();
-			// case h: File Extension : don't eat
-			this.tokens.rule.exts = this.parseFileExtension();
-			// case k: URL
-			this.tokens.rule.url = this.parseURL();
-			// case c,d,e: Hyphenated terms
-			this._addPosition(this.tokens.word, this.parseHyphenatedTerms());
-			// case a and general word parser
-			this._addPosition(this.tokens.word, this.parseGeneralWord());
+			if( JSSConst.GetConfig("parse_phrase") ){
+				this._addPosition( this.tokens.phrase, this.parsePhrase() )
+				//log( this.tokens.phrase );
+			}
+
+			if( JSSConst.GetConfig("parse_special_term") ){
+				// case f: Date
+				this.tokens.rule.date = this.parseDate();
+				// case j: IP addresses
+				this.tokens.rule.ip = this.parseIP();
+				// case g: Number
+				this.tokens.rule.number = this.parseNumber();
+				// case i: Email
+				this.tokens.rule.email = this.parseEmail();
+				// case h: File Extension : don't eat
+				this.tokens.rule.exts = this.parseFileExtension();
+				// case k: URL
+				this.tokens.rule.url = this.parseURL();
+				// case c,d,e: Hyphenated terms
+				this._addPosition(this.tokens.word, this.parseHyphenatedTerms());
+			}
+
+			if( JSSConst.GetConfig("parse_single_term") || JSSConst.GetConfig("apply_stemmer") ){
+				// case a and general word parser
+				this._addPosition(this.tokens.word, this.parseGeneralWord());
+			}
 
 			return this.tokens;	
 		},
@@ -1102,6 +1111,28 @@
 					res.push({word: JSSU.stemmer(match[0]), pos: [match.index, match.index + match[0].length -1 ]})
 			}
 			return res;
+		},
+		parsePhrase: function(){
+			// not implement positional index
+			var res = [];
+			var pieces = this.txt.replace( stopRegExp, "\u001f" ).split("\u001f").filter((word) => !!word.length)
+			
+			for( var i=0; i<pieces.length; i++ ){
+				pieces[i] = pieces[i].split(" ").filter((word) => !!word.length)
+			}
+
+			for( let len of JSSConst.GetConfig("phrase_accept_length") ){
+				for( let piece of pieces ){
+					if( piece.length < len ) continue;
+					for( var i=len-1; i<piece.length; i++ ){
+						var word = piece.slice( i-len+1, i+1 ).join(" "),
+							m = word.match(/[\\\/@#\*\^-_\[\]\{\}\|\+\=&%~]|[0-9]/g );
+						if( !m || m.length == 0)
+							res.push({word: word, pos: [-1,-1]})
+					}
+				}
+			}
+			return res;
 		}
 	}
 
@@ -1149,7 +1180,8 @@
 		},
 		run: function(arg){
 			this.__init();
-			return this.__callDeep(0, arg);
+			this.result = this.__callDeep(0, arg);
+			return this;
 		},
 		terminate: function(){
 			this.__terminated__ = true;

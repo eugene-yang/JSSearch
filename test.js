@@ -63,14 +63,14 @@ module.exports = JSSU.createRunningContainer({},[
 
 		var Docc = new JSSU.Document({
 			id: 3,
-			string: "aaaaaa bbbbbbbbbbbbbb i-20 a considers"
+			string: "I want a google glass ahhhhh"
 		})
 		Docc.createIndex()
 		this.DocumentSet.addDocument(Docc)
 
 		var Docd = new JSSU.Document({
 			id: 4,
-			string: "bbcc aaaaaa considered"
+			string: "is Google Glass really good?"
 		})
 		Docd.createIndex()
 		this.DocumentSet.addDocument(Docd)
@@ -79,17 +79,13 @@ module.exports = JSSU.createRunningContainer({},[
 		console.time("Merging time");
 
 		log( "Start building index" )
-		var invertedIndex = this.DocumentSet.toInvertedIndex()
-		this.IndexHashTable = invertedIndex.HashTable;
-		this.PostingList = invertedIndex.PostingList;
+		this.IndexHashTable = this.DocumentSet.toInvertedIndex()
 		this.addEventChild( this.IndexHashTable );
-		this.addEventChild( this.PostingList );
 		console.timeEnd("Merging time");
 	},
 	function FlushToDisk(){
 		console.time("Flush time")
 		this.IndexHashTable.finalize();
-		this.PostingList.finalize();
 		console.timeEnd("Flush time")
 	}
-])
+]).run()
