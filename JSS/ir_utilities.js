@@ -1140,6 +1140,28 @@
 	// For initialize running framework to let script can run in a full
 	// initialized environment.
 
+	JSSU.DoneCounter = function(whenDone, closure){
+		this._counter = 0;
+		this.whenDone = whenDone;
+		this._savedClosure = closure;
+		this.stillAdding = true;
+	}
+	JSSU.DoneCounter.prototype = {
+		add: function(){ this._counter++; },
+		noMore: function(){
+			this.stillAdding = false;
+			this._realCheck()
+		},
+		check: function(){
+			this._counter--;
+			this._realCheck()
+		},
+		_realCheck: function(){
+			if( this._counter == 0 && !this.stillAdding )
+				this.whenDone.call(this._savedClosure);
+		}
+	}
+
 	JSSU.RunningContainer = function(config, callList){
 		JSSU.Eventable.call(this);
 
@@ -1160,28 +1182,57 @@
 			JSSU.PositionListBufferManager.destroy();
 			JSSU.BufferPoolManager.clean();
 		},
+		setConfig: function(config){
+			for( let key of config.getIterator() ){
+				this.config[key] = config[key]
+			}
+		},
 		__callDeep: function(pointer, preResult){
 			if( this.__terminated__ )
 				return false;
 
 			this.fire("invokeCallFunction", 
 				{index: pointer, name: this.callList[pointer].name, instance: this.callList[pointer]})
+
+			var _this = this;
+			var currentResult = this.callList[pointer].call(this,preResult);
+
 			if( pointer + 1 < this.callList.length ){
-				return this.__callDeep(pointer+1, this.callList[pointer].call(this,preResult) )
+				if( currentResult instanceof Promise ){
+					currentResult.then(function(data){
+						_this.__callDeep(pointer+1, data )
+					}, function(err){
+						console.error(err);
+					})
+				}
+				else {
+					return this.__callDeep(pointer+1, currentResult )
+				}
 			}
 			else {
-				return this.callList[pointer].call(this, preResult);
+				return currentResult;
 			}
 		},
-		setConfig: function(config){
-			for( let key of config.getIterator() ){
-				this.config[key] = config[key]
-			}
+		async: function(runnable){
+			var _this = this;
+			return new Promise(function(resolve, reject){
+				runnable.call(_this, resolve, reject);
+			},function(reason){
+				throw Error(reason);
+			})
 		},
-		run: function(arg){
+		createCounter: function(callback){ return new JSSU.DoneCounter(callback, this) },
+		run: function(arg, callback){
+			if( arg instanceof Function ){
+				callback = arg;
+				delete arg;
+			}
+			if( callback instanceof Function ){
+				this.callList.push( function finalCallback(){ callback.apply(this, arguments) } )
+			}
+
 			this.__init();
-			this.result = this.__callDeep(0, arg);
-			return this;
+			return this.result = this.__callDeep(0, arg);
 		},
 		terminate: function(){
 			this.__terminated__ = true;
