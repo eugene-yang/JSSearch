@@ -17,7 +17,7 @@ for( let ml of memoryLimitList ){
 	output.setConfig({
 		memory: {
 			memoryLimit: ml,
-			flushBunch: 66 * 4 // about 4 blocks(4K)
+			flushBunch: Math.floor( Math.floor(ml*0.2 / 5.5) *5.5 ) // about 5.5 records per block
 		}
 	})
 	// runtime timers are embedded in the container
