@@ -673,7 +673,7 @@
 				currentTerm = null
 				//dfCounter = 0;
 
-			this.fire("buildHashTableStarted")
+			this.fire("buildInvertedIndexStarted")
 			for( let item of this.combinedIndex.getIterator() ){
 				if( item.Type !== currentType || item.Term !== currentTerm ){
 					if( counter > 0 ){ // push
@@ -694,13 +694,14 @@
 				//dfCounter++;
 				counter++;
 			}
-			this.fire("buildHashTableDone")
+			this.fire("buildInvertedIndexDone")
 		},
 		load: function(){
 			// load all entries into memory, if still under memory constraint,
 			// then would have to perform sequential access
 			
 			// without memory constraint version
+			this.fire("buildHashTableStarted")
 			this.hashTable = { 'word':{}, 'phrase': {} };
 			this.hashedEntryCounter = 0;
 			for( let item of this.getIterator() ){
@@ -708,6 +709,7 @@
 				this.hashTable[ item.Type ][ item.Term ] = item;
 				this.hashedEntryCounter++;
 			}
+			this.fire("buildHashTableDone")
 		},
 		getPostingListIteratorByOffset: function*(offset, validation){
 			yield* this.combinedIndex.getIteratorByOffset( offset, true, validation )
