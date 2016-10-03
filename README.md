@@ -14,6 +14,8 @@ This is a course project of Information Retrieval in Georgetown University.
 npm install
 ```
 
+- In order to run container in a safe and clean way, please expose garbage collection function by adding argument `--expose-gc` when execute `node`.
+
 ## Configuration
 
 - Configurations are listed in `config.json`, including memory constraint and flush bunch settings. 
@@ -50,6 +52,12 @@ npm install
 	The event handler would have 2 arguments, `event` and `data`. The `event` object would include a property `target` indicates the target of the event.
 
 - Sample of the usage can be found in `buildBenchInvertedIndex.js` and `runStats.js`
+
+- To run `runStats.js`, which is the script for generating the statistical report, please use the following command.
+
+```shell
+node --expose-gc runStats.js
+``` 
 
 ## License
 
