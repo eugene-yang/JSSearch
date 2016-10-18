@@ -197,54 +197,86 @@
 
 		if( typeof(id) == "object" ){
 			schema = id.schema, type = id.type, ext = id.ext;
+			fnd = id.fnd, load = id.load;
 			id = id.id;
 		}
-		ext = ext || "tmp";
+		var load = load || false
+		var ext = ext || "tmp";
 		this.type = type || "fixed";
+
+		if( load == true ){
+			this.READONLY = true
+			this.deleteAtTheEnd = false;
+
+			// check main file existence
+			try {
+				this.FD = fs.openSync(fnd, "r")
+			} catch(e){
+				throw new Error("Index file does not exist", fnd)
+			}
+			// check schema file
+			try {
+				this.schema = new JSSU.Schema( JSON.parse( fs.readFileSync(fnd + ".schema", "utf8") ) );
+				this.type = "fixed"
+				this.inMemoryFirstIndex = fs.fstatSync(this.FD).size / this.schema.length;
+				this.writebufferList = new Array( this.inMemoryFirstIndex );
+
+			} catch(e){
+				this.type = "varchar"
+				this.inMemoryOffset = fs.fstatSync(this.FD).size;
+			}
+		}
+		else{
+			this.READONLY = false
+
+			// destruction settings
+			this.deleteAtTheEnd = false;
+			if( ext == "tmp" && JSSConst.GetConfig("preserve_temp_files") == false )
+				this.deleteAtTheEnd = true;
+
+			// initialize and open file pointer
+			this.fnd = ((ext == "tmp") ? JSSU.BufferPoolManager.tempDir : "") + id + "." + ext;
+			this.FD = fs.openSync( this.fnd, 'w+' )
+		}
+
+		this.pinned = false;
 
 		// for fixed schema
 		if( this.type == "fixed" ){
-			this.schema = new JSSU.Schema( schema );
-			this.writebufferList = [];
+			this.schema = this.schema || new JSSU.Schema( schema );
+			this.writebufferList = this.writebufferList || [];
 			this.readbufferList = [];
 			this.readCounter = 0;
-			this.inMemoryFirstIndex = 0;
+			this.inMemoryFirstIndex = this.inMemoryFirstIndex || 0;
+
+			// register this instance to BufferPoolManager
+			this.managerIndex = JSSU.BufferPoolManager.addManager( this );
 		}
 
 		// for varchar
 		if( this.type == "varchar" ){
 			this.autoFlush = true; // for now
-			this.inMemoryOffset = 0;
+			this.inMemoryOffset = this.inMemoryOffset || 0;
 			this.inMemoryString = "";
 			this.separator = JSSConst.VarCharSeparator;
 			this.defaultReadChunck = JSSConst.GetConfig("default_varchar_read_chunck");
 		}
-
-		// destruction settings
-		this.deleteAtTheEnd = false;
-		if( ext == "tmp" && JSSConst.GetConfig("preserve_temp_files") == false )
-			this.deleteAtTheEnd = true;
-
-		// register this instance to BufferPoolManager
-		// TODO: only track fixed buffer manger at this time
-		this.pinned = false;
-		if( this.type == "fixed" ){
-			this.managerIndex = JSSU.BufferPoolManager.addManager( this );
-		}
-		// initialize and open file pointer
-		this.fnd = ((ext == "tmp") ? JSSU.BufferPoolManager.tempDir : "") + id + "." + ext;
-		this.FD = fs.openSync( this.fnd, 'w+' )
 	}
 	JSSU.BufferManager.prototype = {
 		toRealFile: function(fnd){
 			this.deleteAtTheEnd = false;
 			fs.renameSync( this.fnd, fnd );
 			this.fnd = fnd;
+			this.outputSchema();
+		},
+		outputSchema: function(){
+			if( this.type == "fixed" )
+				this.schema.toRealFile(this.fnd + ".schema");
 		},
 		destroy: function(){
 			try{
 				fs.closeSync( this.FD );
-				if( this.deleteAtTheEnd )
+				if( this.deleteAtTheEnd && this.READONLY == false )
 					fs.unlinkSync( this.fnd );
 				JSSU.BufferPoolManager.removeManger( this.managerIndex );
 			}
@@ -259,6 +291,11 @@
 			JSSU.BufferPoolManager.requestSpace(num);
 		},
 		_write: function(str, offset, callback){
+			if( this.READONLY === false ){
+				// prevent from altering existing index files
+				throw new Error("Buffer on READONLY mode", this.fnd)
+			}
+
 			// prevent special ascii encoding 
 			// http://stackoverflow.com/questions/150033/regular-expression-to-match-non-english-characters
 			str = str.replace(/[^\x00-\x7F]/ig, "?");
@@ -333,6 +370,7 @@
 			if( !get ){
 				var nextReadCache = ind + 1;
 				for( ; nextReadCache < this.length && this.readbufferList[ nextReadCache ] === undefined; nextReadCache++ ){}
+				if( nextReadCache < this.length ) nextReadCache = Infinity
 				
 				var bunch = Math.min( nextReadCache - ind, this.inMemoryFirstIndex - ind, JSSU.BufferPoolManager.flushBunch),
 					schemaLength = this.schema.length;
@@ -346,7 +384,6 @@
 					counter++;
 				}
 				get = this.readbufferList[ ind ];
-				if( isNaN(get.TermFreq) )debugger;
 				this.readCounter += counter;
 				this.fire("read", counter);
 			}
@@ -358,6 +395,7 @@
 		getIteratorFromIndex: function*(ind){
 			for( var i=ind; i<this.length; i++ ){
 				var ret = this.get( i );
+				if( ret === undefined ) break;
 				this.dropCache( i )
 				yield ret;
 			}
@@ -416,6 +454,11 @@
 		this.schema = schema;
 	}
 	JSSU.Schema.prototype = {
+		toRealFile: function(fnd){
+			var FD = fs.openSync( fnd, 'w+' )
+			fs.writeSync( FD, JSON.stringify(this.schema) )
+			fs.close(FD)
+		},
 		parse: function(string){
 			string = string.replace("\n","");
 			var collect = {};
@@ -656,14 +699,26 @@
 		}
 	})
 
+	JSSU.LoadIndex = function(){
+
+	}
+	JSSU.LoadIndexHashTable = function(prefixName, dir){
+
+	}
+
 	JSSU.IndexHashTable = function(combinedIndex){
 		JSSU.Eventable.call(this);
+
+		if( typeof(combinedIndex) === 'object' ){
+			// specified everything
+		}
 
 		this.combinedIndex = combinedIndex;
 		this.bufferManager = new JSSU.BufferManager( "indexHT",  JSSConst.IndexSchema.HashTable );
 		this.ext = "index";
 		this.hashTable = {};
 		this.hashedEntryCounter = 0;
+		this.positionListBufferManager = JSSU.PositionListBufferManager;
 	}
 	JSSU.IndexHashTable.prototype = {
 		calculate: function(){
@@ -750,7 +805,7 @@
 			}
 		},
 		getPositionListByOffset: function(offset){
-			return JSSU.PositionListBufferManager.parseString( JSSU.PositionListBufferManager.fetch(offset) )
+			return this.positionListBufferManager.parseString( this.positionListBufferManager.fetch(offset) )
 		},
 		getPositionListByTermDocument: function(term, documentId, type){
 			var termNode = this.findTerm(term, true, type);

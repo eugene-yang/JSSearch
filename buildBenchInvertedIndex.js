@@ -5,7 +5,7 @@
 // package include
 var fs = require('fs'),
 	cheerio = require('cheerio'),
-	JSSU = require('./JSS/ir_utilities.js');
+	JSSU = require('./JSS/utilities.js');
 
 var log = function(obj){ console.log(typeof(obj) == "string" ? obj : JSON.stringify(obj, null, 2)) }
 

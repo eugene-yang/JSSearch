@@ -1,3 +1,7 @@
 _data/
 *.sublime-workspace
 node_modules/
+*.index
+*.schema
+*.position
+*.posting
