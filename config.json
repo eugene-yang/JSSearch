@@ -15,5 +15,5 @@
 	"phrase_accept_length": [2,3],
 	"parse_special_term": false,
 
-	"default_index_with_position": false
+	"default_index_with_position": true
 }

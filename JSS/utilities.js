@@ -200,7 +200,7 @@
 			fnd = id.fnd, load = id.load;
 			id = id.id;
 		}
-		var load = load || false
+		var load = !!load || false
 		var ext = ext || "tmp";
 		this.type = type || "fixed";
 
@@ -291,7 +291,7 @@
 			JSSU.BufferPoolManager.requestSpace(num);
 		},
 		_write: function(str, offset, callback){
-			if( this.READONLY === false ){
+			if( this.READONLY === true ){
 				// prevent from altering existing index files
 				throw new Error("Buffer on READONLY mode", this.fnd)
 			}
