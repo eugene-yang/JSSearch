@@ -459,6 +459,13 @@
 			fs.writeSync( FD, JSON.stringify(this.schema) )
 			fs.close(FD)
 		},
+		hasField: function(field){
+			for( let ent of this.schema ){
+				if( ent.name == field )
+					return true
+			}
+			return false;
+		},
 		parse: function(string){
 			string = string.replace("\n","");
 			var collect = {};
@@ -493,13 +500,8 @@
 	});
 
 	// create global buffer manager instance for position list file
-	function createPositionListBufferManager(){
-		JSSU.PositionListBufferManager = new JSSU.BufferManager({
-			id: JSSConst.GetConfig("inverted_index_type"),
-			schema: null,
-			type: "varchar",
-			ext: "position"
-		})
+	function positionListBufferManagerGlobalMethods(){
+		JSSU.PositionListBufferManager = JSSU.PositionListBufferManager || {}
 		JSSU.PositionListBufferManager.createString = function(positionList){
 			return positionList.join(",");
 		}
@@ -512,7 +514,17 @@
 			return ret;
 		}
 	}
-	createPositionListBufferManager();
+	JSSU.createPositionListBufferManager = function(){
+		JSSU.PositionListBufferManager = new JSSU.BufferManager({
+			id: JSSConst.GetConfig("inverted_index_type"),
+			schema: null,
+			type: "varchar",
+			ext: "position"
+		})
+		positionListBufferManagerGlobalMethods()
+	}
+	positionListBufferManagerGlobalMethods()
+	
 
 	//---------------------- High Level Interface -----------------------
 
@@ -580,6 +592,11 @@
 		if( target instanceof JSSU.Document ){
 			this.Id = this.Id || target.Id;
 			this.bufferManager = target.bufferManager;
+		}
+		else if( typeof(target) === "string" ){
+			// file name
+			this.bufferManager = new JSSU.BufferManager({ fnd: target, load: true })
+			this.config.tokenPosition = this.bufferManager.schema.hasField("PositionPointer");
 		}
 		else{
 			this.bufferManager = new JSSU.BufferManager( Id, 
@@ -699,26 +716,36 @@
 		}
 	})
 
-	JSSU.LoadIndex = function(){
-
-	}
 	JSSU.LoadIndexHashTable = function(prefixName, dir){
-
+		var dir = dir || ".";
+		return new JSSU.IndexHashTable({
+			mainFnd: dir + "/" + prefixName + ".index",
+			postingFnd: dir + "/" + prefixName + ".posting",
+			positionFnd: dir + "/" + prefixName + ".position"
+		})
 	}
 
 	JSSU.IndexHashTable = function(combinedIndex){
 		JSSU.Eventable.call(this);
 
-		if( typeof(combinedIndex) === 'object' ){
+		if( !( combinedIndex instanceof JSSU.IndexedList ) ){
 			// specified everything
+			var config = combinedIndex;
+			this.bufferManager = new JSSU.BufferManager({ fnd: config.mainFnd, load:true })
+			this.combinedIndex = new JSSU.IndexedList(null, config.postingFnd );
+			try {
+				this.positionListBufferManager = new JSSU.BufferManager({ fnd: config.positionFnd, load:true })
+			} catch(e){
+				this.positionListBufferManager = null;
+			}
 		}
 
-		this.combinedIndex = combinedIndex;
-		this.bufferManager = new JSSU.BufferManager( "indexHT",  JSSConst.IndexSchema.HashTable );
+		this.combinedIndex = this.combinedIndex || combinedIndex;
+		this.bufferManager = this.bufferManager || new JSSU.BufferManager( "indexHT",  JSSConst.IndexSchema.HashTable );
 		this.ext = "index";
 		this.hashTable = {};
 		this.hashedEntryCounter = 0;
-		this.positionListBufferManager = JSSU.PositionListBufferManager;
+		this.positionListBufferManager = this.positionListBufferManager || JSSU.PositionListBufferManager;
 	}
 	JSSU.IndexHashTable.prototype = {
 		calculate: function(){
@@ -805,7 +832,7 @@
 			}
 		},
 		getPositionListByOffset: function(offset){
-			return this.positionListBufferManager.parseString( this.positionListBufferManager.fetch(offset) )
+			return JSSU.PositionListBufferManager.parseString( this.positionListBufferManager.fetch(offset) )
 		},
 		getPositionListByTermDocument: function(term, documentId, type){
 			var termNode = this.findTerm(term, true, type);
@@ -1232,7 +1259,7 @@
 	}
 	JSSU.RunningContainer.prototype = {
 		__init: function(){
-			createPositionListBufferManager();
+			JSSU.createPositionListBufferManager();
 			JSSU.BufferPoolManager.initialize(this.config.memory || null);
 		},
 		destroy: function(){

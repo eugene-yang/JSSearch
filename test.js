@@ -8,4 +8,6 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 output = require("./buildBenchInvertedIndex")
 output.run()
 
+// r = JSSU.LoadIndexHashTable("single")
+
 debugger

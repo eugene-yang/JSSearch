@@ -11,7 +11,7 @@
 	"parse_single_term": true,
 	"exclude_stop_words": true,
 	"apply_stemmer": false,
-	"parse_phrase": true,
+	"parse_phrase": false,
 	"phrase_accept_length": [2,3],
 	"parse_special_term": false,
 
