@@ -216,7 +216,9 @@
 			}
 			// check schema file
 			try {
-				this.schema = new JSSU.Schema( JSON.parse( fs.readFileSync(fnd + ".schema", "utf8") ) );
+				var settings = JSON.parse( fs.readFileSync(fnd + ".schema", "utf8") );
+				this.schema = new JSSU.Schema( settings.schema );
+				this.cacheConfig = settings.config;
 				this.type = "fixed"
 				this.inMemoryFirstIndex = fs.fstatSync(this.FD).size / this.schema.length;
 				this.writebufferList = new Array( this.inMemoryFirstIndex );
@@ -456,7 +458,18 @@
 	JSSU.Schema.prototype = {
 		toRealFile: function(fnd){
 			var FD = fs.openSync( fnd, 'w+' )
-			fs.writeSync( FD, JSON.stringify(this.schema) )
+			fs.writeSync( FD, JSON.stringify({
+				schema: this.schema,
+				config: {
+					"parse_single_term": JSSConst.GetConfig("parse_single_term"),
+					"exclude_stop_words": JSSConst.GetConfig("exclude_stop_words"),
+					"apply_stemmer": JSSConst.GetConfig("apply_stemmer"),
+					"parse_phrase": JSSConst.GetConfig("parse_phrase"),
+					"phrase_accept_length": JSSConst.GetConfig("phrase_accept_length"),
+					"parse_special_term": JSSConst.GetConfig("parse_special_term"),
+					"default_index_with_position": JSSConst.GetConfig("default_index_with_position")
+				}
+			}) )
 			fs.close(FD)
 		},
 		hasField: function(field){
@@ -854,6 +867,13 @@
 	}
 	JSSU.IndexHashTable.extend( JSSU.IndexedList );
 	JSSU.IndexHashTable.extend( JSSU.Eventable );
+	Object.defineProperties(JSSU.IndexHashTable.prototype, {
+		configFromFile: {
+			get: function(){
+				return this.bufferManager.cacheConfig;
+			}
+		}
+	})
 
 	JSSU.Document = function(id, string, config){
 		JSSU.Eventable.call(this);
@@ -980,15 +1000,15 @@
 
 	// Maintain a true filter only if we want to exclude stop words
 	// return true if the word is not on stop list
-	JSSU.stopFilter = () => true;
+	// JSSU.stopFilter = () => true;
 	var _stopList = fs.readFileSync( JSSConst.GetConfig("stop_word_list"), "utf8" ).split("\n");
 	var stopRegExp = new RegExp("\\W((" + _stopList.join("|") + ")\\W)+|("+ ["\\,","\\.","\\!","\\?"].join("|") +")", "ig")
-	if( JSSConst.GetConfig("exclude_stop_words") )
+	// if( JSSConst.GetConfig("exclude_stop_words") )
 		JSSU.stopFilter = (word) => { return _stopList.indexOf(word) == -1 }
 
 	// Maintain true stemmer if we want to use it
-	JSSU.stemmer = (word) => word;
-	if( JSSConst.GetConfig("apply_stemmer") )
+	// JSSU.stemmer = (word) => word;
+	// if( JSSConst.GetConfig("apply_stemmer") )
 		JSSU.stemmer = (word) => { return porterStemmer(word) }
 
 
@@ -998,20 +1018,27 @@
 	 * @param  {type of tokenizer}
 	 * @return {array of string token}
 	 */
-	JSSU.tokenize = function(txt, type){
+	JSSU.tokenize = function(txt, type, config){
 		// TODO: add more different type of tokenizer
 		var tokens = {};
 		switch(type){
 			default:
-				tokens = (new JSSU.DefaultTokenizer(txt)).run();
+				tokens = (new JSSU.DefaultTokenizer(txt, config)).run();
 		}
 		return tokens;
 	}
-	JSSU.DefaultTokenizer = function(txt){
+	JSSU.DefaultTokenizer = function(txt, config){
 		this.txt = txt.replace(/[\n\r|\n|\n\r]+/g, " ").toLowerCase();
 		this.tokens = { word: {}, rule: {}, phrase: {} };
 
-		this.useStemmer = JSSConst.GetConfig("apply_stemmer");
+		this.config = config || {};
+
+		var settingList = ["parse_single_term","exclude_stop_words","apply_stemmer","parse_phrase","phrase_accept_length","parse_special_term"]
+
+		for( var se in settingList ){
+			this.config[se] = this.config[se] || JSSConst.GetConfig(se);
+		}
+		
 	}
 	JSSU.DefaultTokenizer.prototype = {
 		_increment: function(target, list){
@@ -1048,12 +1075,12 @@
 		run: function(){
 			// run all type identifiers in proper sequence
 
-			if( JSSConst.GetConfig("parse_phrase") ){
+			if( this.config["parse_phrase"] ){
 				this._addPosition( this.tokens.phrase, this.parsePhrase() )
 				//log( this.tokens.phrase );
 			}
 
-			if( JSSConst.GetConfig("parse_special_term") ){
+			if( this.config["parse_special_term"] ){
 				// case f: Date
 				this.tokens.rule.date = this.parseDate();
 				// case j: IP addresses
@@ -1070,7 +1097,7 @@
 				this._addPosition(this.tokens.word, this.parseHyphenatedTerms());
 			}
 
-			if( JSSConst.GetConfig("parse_single_term") || JSSConst.GetConfig("apply_stemmer") ){
+			if( this.config["parse_single_term"] || this.config["apply_stemmer"] ){
 				// case a and general word parser
 				this._addPosition(this.tokens.word, this.parseGeneralWord());
 			}
@@ -1180,9 +1207,15 @@
 				// mix.push({ word: elem.replace("-",""), pos: [match.index, match.index + elem.length - 1] });
 				parts = elem.split("-")
 				if( parts[0].length >= 3 )
-					mix.push( { word: JSSU.stemmer(parts[0]), pos: [match.index, match.index + parts[0].length - 1] } )
+					mix.push( { 
+						word: this.config["apply_stemmer"] ? JSSU.stemmer(parts[0]) : parts[0], 
+						pos: [match.index, match.index + parts[0].length - 1] 
+					} )
 				if( parts[1].length >= 3 )
-					mix.push( { word: JSSU.stemmer(parts[1]), pos: [match.index + parts[0].length, match.index + elem.length - 1] } )
+					mix.push( { 
+						word: this.config["apply_stemmer"] ? JSSU.stemmer(parts[1]) : parts[1], 
+						pos: [match.index + parts[0].length, match.index + elem.length - 1] 
+					} )
 
 			}
 			return mix;
@@ -1191,8 +1224,11 @@
 			var res = [],
 				revisedText = this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ");
 			while( (match = JSSConst.RE.GeneralWord.exec(revisedText)) != null ){
-				if( JSSU.stopFilter(match[0]) )
-					res.push({word: JSSU.stemmer(match[0]), pos: [match.index, match.index + match[0].length -1 ]})
+				if( !JSSConst.GetConfig("exclude_stop_words") || JSSU.stopFilter(match[0]) )
+					res.push({
+						word: this.config["apply_stemmer"] ? JSSU.stemmer(match[0]) : match[0], 
+						pos: [match.index, match.index + match[0].length -1 ]
+					})
 			}
 			return res;
 		},
@@ -1205,7 +1241,7 @@
 				pieces[i] = pieces[i].split(" ").filter((word) => !!word.length)
 			}
 
-			for( let len of JSSConst.GetConfig("phrase_accept_length") ){
+			for( let len of this.config["phrase_accept_length"] ){
 				for( let piece of pieces ){
 					if( piece.length < len ) continue;
 					for( var i=len-1; i<piece.length; i++ ){
