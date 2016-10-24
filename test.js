@@ -5,9 +5,9 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
 // r.get(0)
 
-output = require("./buildBenchInvertedIndex")
-output.run()
+// output = require("./buildBenchInvertedIndex")
+// output.run()
 
-// r = JSSU.LoadIndexHashTable("single")
+r = JSSU.LoadIndexHashTable("single")
 
 debugger

@@ -20,7 +20,7 @@
 	// for debug
 	var log = obj => console.log(JSON.stringify(obj, null, 2))
 
-	//--------------- Basic Event Object ---------------------
+	//------------------ Basic Event Object ---------------------
 	JSSU.Eventable = function(){
 		this.__event__stack__ = {};
 		this.__event__universal__listeners = [];
@@ -76,7 +76,7 @@
 		}
 	}
 
-	//--------------- Basic Storage Classes ------------------
+	//------------------ Basic Storage Classes ------------------
 
 	// Singleton, universal buffer manager
 	// TODO: Perform different buffer swapping policy base on current state, like writing/reading state
@@ -998,18 +998,11 @@
 		}
 	}
 
-	// Maintain a true filter only if we want to exclude stop words
-	// return true if the word is not on stop list
-	// JSSU.stopFilter = () => true;
 	var _stopList = fs.readFileSync( JSSConst.GetConfig("stop_word_list"), "utf8" ).split("\n");
 	var stopRegExp = new RegExp("\\W((" + _stopList.join("|") + ")\\W)+|("+ ["\\,","\\.","\\!","\\?"].join("|") +")", "ig")
-	// if( JSSConst.GetConfig("exclude_stop_words") )
-		JSSU.stopFilter = (word) => { return _stopList.indexOf(word) == -1 }
-
-	// Maintain true stemmer if we want to use it
-	// JSSU.stemmer = (word) => word;
-	// if( JSSConst.GetConfig("apply_stemmer") )
-		JSSU.stemmer = (word) => { return porterStemmer(word) }
+	JSSU.stopFilter = (word) => { return _stopList.indexOf(word) == -1 }
+	
+	JSSU.stemmer = (word) => { return porterStemmer(word) }
 
 
 	/** 
@@ -1035,10 +1028,9 @@
 
 		var settingList = ["parse_single_term","exclude_stop_words","apply_stemmer","parse_phrase","phrase_accept_length","parse_special_term"]
 
-		for( var se in settingList ){
-			this.config[se] = this.config[se] || JSSConst.GetConfig(se);
+		for( let se of settingList ){
+			this.config[se] = this.config[se] === undefined ? JSSConst.GetConfig(se) : this.config[se];
 		}
-		
 	}
 	JSSU.DefaultTokenizer.prototype = {
 		_increment: function(target, list){
@@ -1224,7 +1216,7 @@
 			var res = [],
 				revisedText = this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ");
 			while( (match = JSSConst.RE.GeneralWord.exec(revisedText)) != null ){
-				if( !JSSConst.GetConfig("exclude_stop_words") || JSSU.stopFilter(match[0]) )
+				if( !this.config["exclude_stop_words"] || JSSU.stopFilter(match[0]) )
 					res.push({
 						word: this.config["apply_stemmer"] ? JSSU.stemmer(match[0]) : match[0], 
 						pos: [match.index, match.index + match[0].length -1 ]
@@ -1256,7 +1248,57 @@
 		}
 	}
 
-	// -------------------- Running Container -------------------------
+	//------------------------ Query Processing -------------------------
+
+	JSSU.Query = function(string, processor, config){
+		this._processor = processor;
+		this.config = config || {};
+
+		this.string = new JSSU.String( string );
+	}
+	JSSU.Query.prototype = {
+		getIterator: function*(){
+			yield* this.string.getFlatIterator();
+		}
+	}
+	Object.defineProperties( JSSU.Query.prototype, {
+		tokens: {
+			get: function(){ return this.string.tokenize(); }
+		}
+	} )
+
+	JSSU.QueryProcessor = function(index, config){
+		if( !(index instanceof JSSU.IndexHashTable) )
+			throw new TypeError("index should be JSSU.IndexHashTable");
+
+		this.index = index;
+		this.index.load();
+
+		this.config = config || {};
+		this.config.query = {
+			tokenType : this.index.configFromFile
+		}
+	}
+	JSSU.QueryProcessor.prototype = {
+		search: function(query){
+			if( !(query instanceof JSSU.Query) )
+				query = new JSSU.Query(query, this, this.config.query);
+
+			var resultByTokens = [];
+			for( let token of query.getIterator() ){
+				log( token );
+			}
+		},
+	}
+
+	// Calculate similarity of query and document
+	JSSU.Similarity = {
+		Cosine: function(){},
+		BM25: function(){},
+		LM: function(){}
+	}
+
+	// ----------------------- Running Container ------------------------
 	// For initialize running framework to let script can run in a full
 	// initialized environment.
 
