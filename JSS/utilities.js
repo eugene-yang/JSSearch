@@ -1286,8 +1286,10 @@
 
 			var resultByTokens = [];
 			for( let token of query.getIterator() ){
-				log( token );
+				// get document list, df and tf
 			}
+			// then reverse to document-keyed version 
+			// sort by similarity using sorting function and call similiarty functions
 		},
 	}
 
