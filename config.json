@@ -15,5 +15,7 @@
 	"phrase_accept_length": [2,3],
 	"parse_special_term": false,
 
-	"default_index_with_position": true
+	"default_index_with_position": true,
+
+	"similarity_measure": "Cosine"
 }

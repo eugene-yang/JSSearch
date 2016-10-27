@@ -61,8 +61,9 @@
 			{ name: "TermFreq", length: 4, type: "number" },
 		]
 	}
-	JSSConst.VarCharSeparator = "\u001d"; // ASCII code group separator  
 
+	JSSConst.VarCharSeparator = "\u001d"; // ASCII code group separator  
+	JSSConst.TokenTypeSeparator = "\u001c";
 
 	// Add utility method directly to JS Objects
 	Object.prototype.getIterator = function*(){

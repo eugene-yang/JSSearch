@@ -5,3 +5,4 @@ node_modules/
 *.schema
 *.position
 *.posting
+*.meta

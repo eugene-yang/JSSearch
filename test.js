@@ -8,6 +8,10 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 // output = require("./buildBenchInvertedIndex")
 // output.run()
 
-r = JSSU.LoadIndexHashTable("single")
+var engine = new JSSU.QueryProcessor( JSSU.LoadIndexHashTable("single") );
+
+log( engine.search("find my iPhone quick") )
+// engine.search("find my iPhone quick")
+
 
 debugger

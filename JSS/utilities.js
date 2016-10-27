@@ -198,11 +198,15 @@
 		if( typeof(id) == "object" ){
 			schema = id.schema, type = id.type, ext = id.ext;
 			fnd = id.fnd, load = id.load;
+			parent = id.parent;
 			id = id.id;
 		}
+
 		var load = !!load || false
 		var ext = ext || "tmp";
 		this.type = type || "fixed";
+
+		this._parent = parent || undefined;
 
 		if( load == true ){
 			this.READONLY = true
@@ -222,11 +226,17 @@
 				this.type = "fixed"
 				this.inMemoryFirstIndex = fs.fstatSync(this.FD).size / this.schema.length;
 				this.writebufferList = new Array( this.inMemoryFirstIndex );
-
 			} catch(e){
 				this.type = "varchar"
 				this.inMemoryOffset = fs.fstatSync(this.FD).size;
 			}
+			// check meta data file
+			try {
+				var meta = JSON.parse( fs.readFileSync(fnd + ".meta", "utf8") );
+				this._meta = meta;
+				if( !!this._parent )
+					this._parent.meta = this._meta;
+			} catch(e){}
 		}
 		else{
 			this.READONLY = false
@@ -556,6 +566,8 @@
 			this.addEventChild( doc );
 			this._count++;
 
+			this.meta = {};
+
 			this.fire("documentAdded", doc);
 		},
 		toInvertedIndex: function(){
@@ -563,8 +575,10 @@
 			// output an JSSU.IndexedList object with entries all flushed
 			// finalList.finalize()
 			var l = [];
+			this.meta.length = {};
 			for( let id of this.getIterator() ){
 				l.push( new JSSU.IndexedList(null, this.set[ id ]) );
+				this.meta.length[ id ] = this.set[id].tokenCount;
 			}
 			// unlink all document instance so that the garbage collection can collect 
 			// these along merging
@@ -575,7 +589,7 @@
 			this.fire("mergingDone");
 
 			
-			var indexHT = new JSSU.IndexHashTable( combinedIndex );
+			var indexHT = new JSSU.IndexHashTable( combinedIndex, this.meta );
 			indexHT.calculate();
 			
 			return indexHT;
@@ -673,11 +687,19 @@
 	}
 	JSSU.IndexedList.prototype = {
 		finalize: function(){
+			var fnd = JSSConst.GetConfig("index_output_directory") + JSSConst.GetConfig("inverted_index_type") + "." + this.ext;
 			this.fire("finalizingStarted");
 			if( this.combinedIndex ) this.combinedIndex.finalize();
 			this.bufferManager.flushAll();
-			this.bufferManager.toRealFile( 
-				JSSConst.GetConfig("index_output_directory") + JSSConst.GetConfig("inverted_index_type") + "." + this.ext );
+			this.bufferManager.toRealFile( fnd );
+
+			// write metaData
+			if( !!this.meta ){
+				var FD = fs.openSync( fnd + ".meta", 'w+' )
+				fs.writeSync( FD, JSON.stringify(this.meta) )
+				fs.close(FD)
+			}
+
 			this.fire("finalizingDone");
 		},
 		destroy: function(){
@@ -726,6 +748,9 @@
 	Object.defineProperties(JSSU.IndexedList.prototype, {
 		schemaLength: {
 			get: function(){ return this.bufferManager.schema.length; }
+		},
+		meta: {
+			get: function(){ return this.bufferManager._meta || this._meta; }
 		}
 	})
 
@@ -738,13 +763,15 @@
 		})
 	}
 
-	JSSU.IndexHashTable = function(combinedIndex){
+	JSSU.IndexHashTable = function(combinedIndex, metaData){
 		JSSU.Eventable.call(this);
+
+		
 
 		if( !( combinedIndex instanceof JSSU.IndexedList ) ){
 			// specified everything
 			var config = combinedIndex;
-			this.bufferManager = new JSSU.BufferManager({ fnd: config.mainFnd, load:true })
+			this.bufferManager = new JSSU.BufferManager({ fnd: config.mainFnd, load:true, parent: this })
 			this.combinedIndex = new JSSU.IndexedList(null, config.postingFnd );
 			try {
 				this.positionListBufferManager = new JSSU.BufferManager({ fnd: config.positionFnd, load:true })
@@ -752,6 +779,8 @@
 				this.positionListBufferManager = null;
 			}
 		}
+
+		this._meta = metaData || null;
 
 		this.combinedIndex = this.combinedIndex || combinedIndex;
 		this.bufferManager = this.bufferManager || new JSSU.BufferManager( "indexHT",  JSSConst.IndexSchema.HashTable );
@@ -892,6 +921,7 @@
 		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("default_index_with_position");
 
 		this.String = new JSSU.String( string );
+		this.tokenCount = 0;
 		this.bufferManager = new JSSU.BufferManager(id, 
 			!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
 
@@ -923,6 +953,7 @@
 					"TermFreq": item.post.length,
 					"PositionPointer": postPointer
 				})
+				this.tokenCount++;
 			}
 			//log( this.bufferManager.writebufferList )
 		},
@@ -1249,21 +1280,40 @@
 	}
 
 	//------------------------ Query Processing -------------------------
+	
+	var TokenTypeToKey = ( token, type ) => (token + JSSConst.TokenTypeSeparator + type);
+	var DecodeTokenKey = key => ( {"Token": key.split(JSSConst.TokenTypeSeparator)[0], "Type": key.split(JSSConst.TokenTypeSeparator)[1] } )
 
 	JSSU.Query = function(string, processor, config){
 		this._processor = processor;
 		this.config = config || {};
 
+		this.df = {};
+		this.idf = {};
+		this.tf = {};
+
 		this.string = new JSSU.String( string );
+		
+		// create term frequency list
+		for( let token of this.getIterator() ){
+			this.tf[ TokenTypeToKey(token.term, token.type) ] = token.post.length;
+		}
 	}
 	JSSU.Query.prototype = {
 		getIterator: function*(){
 			yield* this.string.getFlatIterator();
+		},
+		addDfByKey: function(key, df){
+			this.df[ key ] = df;
+			this.idf[ key ] = Math.log( this._processor.documentCount - df + 0.5 ) - Math.log( df + 0.5 ) 
 		}
 	}
 	Object.defineProperties( JSSU.Query.prototype, {
 		tokens: {
 			get: function(){ return this.string.tokenize(); }
+		},
+		length: {
+			get: function(){ return this.tf.length }
 		}
 	} )
 
@@ -1275,29 +1325,135 @@
 		this.index.load();
 
 		this.config = config || {};
+		this.config.similarity = this.config.similarity || JSSConst.GetConfig("similarity_measure");
 		this.config.query = {
 			tokenType : this.index.configFromFile
 		}
+		this.documentCount = Object.keys(this.index.meta.length).length;
 	}
 	JSSU.QueryProcessor.prototype = {
-		search: function(query){
+		search: function(query, config){
+			var config = config || {};
+
 			if( !(query instanceof JSSU.Query) )
 				query = new JSSU.Query(query, this, this.config.query);
+
+			// bind similarity function
+			// gives error if similarity does not exist
+			var simMeasure = JSSU.Similarity[ config.similarity || this.config.similarity ].bind(this.index, query); 
 
 			var resultByTokens = [];
 			for( let token of query.getIterator() ){
 				// get document list, df and tf
+				var re = this.index.findTerm( token.term, true, token.type );
+				if( !!re ){
+					resultByTokens.push( re );
+					query.addDfByKey( TokenTypeToKey(token.term, token.type), re.DocFreq );
+				}
 			}
-			// then reverse to document-keyed version 
-			// sort by similarity using sorting function and call similiarty functions
+			// then reverse to document-keyed version
+			var resultByDocs = {};
+			for( var i=0; i<resultByTokens.length; i++ ){
+				var token = resultByTokens[i];
+				for( var j=0; j<token.Posting.length; j++ ){
+					if( !resultByDocs[ token.Posting[j].DocumentId ] )
+						resultByDocs[ token.Posting[j].DocumentId ] = {};
+					resultByDocs[ token.Posting[j].DocumentId ][ TokenTypeToKey(token.Term, token.Type) ] = token.Posting[j];
+				}
+			}
+			var docList = [];
+			for( let docId of resultByDocs.getIterator() ){
+				docList.push({ DocumentId: docId, tokens: resultByDocs[docId] })
+			}
+			// sort by similarity using sorting function and call similarity functions
+			docList.sort( simMeasure );
+
+			return docList;
 		},
 	}
 
 	// Calculate similarity of query and document
+	// input always takes query, doca, docb
+	// and closure under inverted index
 	JSSU.Similarity = {
-		Cosine: function(){},
-		BM25: function(){},
-		LM: function(){}
+		Cosine: function(query, doca, docb){
+			if( !!doca.__CosineSimilarityCache && !!docb.__CosineSimilarityCache )
+				return docb.__CosineSimilarityCache - doca.__CosineSimilarityCache
+
+			// need tf and idf(in query)
+			var docaWeights = _VSMWeights(query, doca).doc,
+				docbWeights = _VSMWeights(query, docb).doc,
+				queryWeights = _VSMWeights(query, doca).query;
+
+			var keys = Object.keys( queryWeights );
+
+			var scoreA = 0,
+				scoreB = 0,
+				sqQuery = 0,
+				sqA = 0,
+				sqB = 0;
+			keys.forEach(function(key){
+				scoreA += queryWeights[key] * docaWeights[key] || 0;
+				scoreB += queryWeights[key] * docbWeights[key] || 0;
+				sqQuery += queryWeights[key] * queryWeights[key] || 0;
+				sqA += docaWeights[key] * docaWeights[key] || 0;
+				sqB += docbWeights[key] * docbWeights[key] || 0;
+			})
+			scoreA = scoreA / ( Math.sqrt(sqQuery*sqA) );
+			scoreB = scoreB / ( Math.sqrt(sqQuery*sqB) );
+
+			doca.__CosineSimilarityCache = scoreA;
+			docb.__CosineSimilarityCache = scoreB;
+
+			return scoreB - scoreA;
+		},
+		BM25: function(query, doca, docb){
+			// need tf and idf and count of document
+			// average document length and length of each document
+			// also need some hyper parameters
+		},
+		LM: function(query, doca, docb){
+			// tf and document length
+			// need # of terms in the entire collection -> length of inverted index
+			// length of positing given term
+		}
+	}
+	function _VSMWeights(query, doc){
+		// save cache on instance
+		// calculate query weights
+		var queryWeights = {};
+		if( !!query.__VSMCache )
+			queryWeights = query.__VSMCache;
+		else {
+			var sqsum = 0;
+			for( let key of query.tf.getIterator() ){
+				queryWeights[ key ] = ( Math.log(query.tf[key]) + 1 ) * query.idf[ key ] || 0;
+				sqsum += queryWeights[ key ] * queryWeights[ key ];
+			}
+			for( let key of query.tf.getIterator() ){
+				queryWeights[key] = queryWeights[key] / sqsum;
+			}
+			query.__VSMCache = queryWeights;
+		}
+		var docWeights = {};
+		if( !!doc.__VSMCache )
+			docWeights = doc.__VSMCache;
+		else {
+			var sqsum = 0;
+			for( let key of doc.tokens.getIterator() ){
+				docWeights[ key ] = ( Math.log(doc.tokens[key].TermFreq) + 1 ) * query.idf[ key ] || 0;
+				sqsum += docWeights[ key ] * docWeights[ key ];
+			}
+			for( let key of doc.tokens.getIterator() ){
+				docWeights[key] = docWeights[key] / sqsum;
+			}
+			doc.__VSMCache = docWeights;
+		}
+
+		return {
+			query: queryWeights,
+			doc: docWeights
+		}
 	}
 
 	// ----------------------- Running Container ------------------------
