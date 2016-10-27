@@ -1281,8 +1281,8 @@
 
 	//------------------------ Query Processing -------------------------
 	
-	var TokenTypeToKey = ( token, type ) => (token + JSSConst.TokenTypeSeparator + type);
-	var DecodeTokenKey = key => ( {"Token": key.split(JSSConst.TokenTypeSeparator)[0], "Type": key.split(JSSConst.TokenTypeSeparator)[1] } )
+	var ToKey = function(){ return [...arguments].join( JSSConst.TokenTypeSeparator ) };
+	var DecodeTokenKey = key => ( key.split( JSSConst.TokenTypeSeparator ) )
 
 	JSSU.Query = function(string, processor, config){
 		this._processor = processor;
@@ -1292,20 +1292,47 @@
 		this.idf = {};
 		this.tf = {};
 
+		this._cache = new Map();
+
 		this.string = new JSSU.String( string );
 		
 		// create term frequency list
-		for( let token of this.getIterator() ){
-			this.tf[ TokenTypeToKey(token.term, token.type) ] = token.post.length;
+		for( let token of this.getTokenIterator() ){
+			this.tf[ ToKey([token.term, token.type]) ] = token.post.length;
 		}
 	}
 	JSSU.Query.prototype = {
-		getIterator: function*(){
+		getTokenIterator: function*(){
 			yield* this.string.getFlatIterator();
 		},
-		addDfByKey: function(key, df){
+		getKeyIterator: function*(){
+			yield* this.tf.getIterator();
+		},
+		addDfByKey: function(df){
+			var key = [...arguments].slice(1)
 			this.df[ key ] = df;
+			// smoothed id
 			this.idf[ key ] = Math.log( this._processor.documentCount - df + 0.5 ) - Math.log( df + 0.5 ) 
+		},
+		getTf: function(){ return this.tf[ ToKey([...arguments]) ] || 0.5; },
+		getiDf: function(){ 
+			return this.idf[ ToKey([...arguments]) ] || 
+					Math.log( this._processor.documentCount + 0.5 ) - Math.log( 0.5 ) ; 
+		},
+
+
+		cacheSimilarityData: function(key, value){
+			if( value != undefined )
+				this._cache.set(key, value);
+			else{
+				return this._cache.get(key);
+			}
+		},
+		hasSimilarityData: function(key){
+			return this._cache.has(key);
+		},
+		removeSimilarityData: function(key){
+			this._cache.delete(key);
 		}
 	}
 	Object.defineProperties( JSSU.Query.prototype, {
@@ -1316,6 +1343,111 @@
 			get: function(){ return this.tf.length }
 		}
 	} )
+
+	JSSU.SearchResult = function(DocId){
+		this._cache = new Map();
+		this._TfSet = new Map();
+		this._postingMatched = []
+		this.DocId = DocId;
+	}
+	JSSU.SearchResult.prototype = {
+		addToken: function(tf){
+			if( typeof(tf) == 'number' ){
+				var argv = [...arguments].slice(1);
+				this._TfSet.set( ToKey(argv), tf );
+			}
+			else {
+				// send posting element directly
+				this._postingMatched.push(tf);
+				this._TfSet.set( ToKey([tf.Term, tf.Type]), tf.TermFreq );
+			}
+		},
+		getKeyIterator: function*(){
+			yield* this._TfSet.keys();
+		},
+		getTf: function(){
+			return this._TfSet.get( ToKey( [...arguments] ) ) || 0.5;
+		},
+
+		cacheSimilarityData: function(key, value){
+			if( value != undefined )
+				this._cache.set(key, value);
+			else{
+				return this._cache.get(key);
+			}
+		},
+		hasSimilarityData: function(key){
+			return this._cache.has(key);
+		},
+		removeSimilarityData: function(key){
+			this._cache.delete(key);
+		}
+	}
+
+	JSSU.SearchResultSet = function(processor, query){
+		this._processor = processor;
+		this._query = query
+		// set of results
+		this._set = new Map(); 
+		// convert to array when sort 
+		this._sorted = null;
+	}
+	JSSU.SearchResultSet.prototype = {
+		// initializing
+		addSearchResult: function(result){
+			if( !(result instanceof JSSU.SearchResult) )
+				return this.addSearchResult( new JSSU.SearchResult(result) );
+			this._set.set( result.DocId, result );
+		},
+		// utilities
+		toDocumentSet: function(){
+			// convert to document set for further search
+		},
+		getIterator: function*(){
+			if( this._sorted == null )
+				yield* this._set;
+			else{
+				yield* this._sorted;
+			}
+		},
+		findDoc: function(docId){
+			// return rank and result instance
+			// undefined if does not exists
+			if( this._set.has(docId) )
+				return {
+					rank: this._sorted != null ? this._sorted.indexOf( this._set.get(docId) ) : undefined,
+					result: this._set.get(docId)
+				}
+			return undefined;
+		},
+
+		// sort the docs
+		rankBy: function(simMeasure){
+			// bind similarity function
+			// gives error if similarity does not exist
+			var simMeasure = JSSU.Similarity[ simMeasure ].bind(this._processor.index, this._query); 
+
+			this._sorted = [...this._set.values()]
+			this._sorted.sort( simMeasure );
+		},
+
+		// after sorting
+		top: function(count){
+			if( this._sorted != null )
+				return this._sorted.slice(0, count);
+			return [];
+		},
+		rank: function(ind){
+			// return result instance
+			if( this._sorted != null )
+				return this._sorted[ ind ];
+			return undefined;
+		},
+		
+	}
+	JSSU.SearchResultSet.merge = function(){
+		// for merging result sets when distributes engines
+	}
 
 	JSSU.QueryProcessor = function(index, config){
 		if( !(index instanceof JSSU.IndexHashTable) )
@@ -1338,37 +1470,30 @@
 			if( !(query instanceof JSSU.Query) )
 				query = new JSSU.Query(query, this, this.config.query);
 
-			// bind similarity function
-			// gives error if similarity does not exist
-			var simMeasure = JSSU.Similarity[ config.similarity || this.config.similarity ].bind(this.index, query); 
-
 			var resultByTokens = [];
-			for( let token of query.getIterator() ){
+			for( let token of query.getTokenIterator() ){
 				// get document list, df and tf
 				var re = this.index.findTerm( token.term, true, token.type );
 				if( !!re ){
 					resultByTokens.push( re );
-					query.addDfByKey( TokenTypeToKey(token.term, token.type), re.DocFreq );
+					query.addDfByKey( re.DocFreq, token.term, token.type);
 				}
 			}
 			// then reverse to document-keyed version
-			var resultByDocs = {};
+			var resultByDocs = new JSSU.SearchResultSet(this, query);
 			for( var i=0; i<resultByTokens.length; i++ ){
 				var token = resultByTokens[i];
 				for( var j=0; j<token.Posting.length; j++ ){
-					if( !resultByDocs[ token.Posting[j].DocumentId ] )
-						resultByDocs[ token.Posting[j].DocumentId ] = {};
-					resultByDocs[ token.Posting[j].DocumentId ][ TokenTypeToKey(token.Term, token.Type) ] = token.Posting[j];
+					if( resultByDocs.findDoc( token.Posting[j].DocumentId ) === undefined )
+						resultByDocs.addSearchResult( token.Posting[j].DocumentId );
+					resultByDocs.findDoc( token.Posting[j].DocumentId ).result.addToken( token.Posting[j] )
 				}
 			}
-			var docList = [];
-			for( let docId of resultByDocs.getIterator() ){
-				docList.push({ DocumentId: docId, tokens: resultByDocs[docId] })
-			}
+			
 			// sort by similarity using sorting function and call similarity functions
-			docList.sort( simMeasure );
+			resultByDocs.rankBy( config.similarity || this.config.similarity );
 
-			return docList;
+			return resultByDocs;
 		},
 	}
 
@@ -1377,8 +1502,8 @@
 	// and closure under inverted index
 	JSSU.Similarity = {
 		Cosine: function(query, doca, docb){
-			if( !!doca.__CosineSimilarityCache && !!docb.__CosineSimilarityCache )
-				return docb.__CosineSimilarityCache - doca.__CosineSimilarityCache
+			if( !!doca.hasSimilarityData("CosineSimilarity") && !!docb.hasSimilarityData("CosineSimilarity") )
+				return docb.cacheSimilarityData("CosineSimilarity") - doca.cacheSimilarityData("CosineSimilarity")
 
 			// need tf and idf(in query)
 			var docaWeights = _VSMWeights(query, doca).doc,
@@ -1402,8 +1527,8 @@
 			scoreA = scoreA / ( Math.sqrt(sqQuery*sqA) );
 			scoreB = scoreB / ( Math.sqrt(sqQuery*sqB) );
 
-			doca.__CosineSimilarityCache = scoreA;
-			docb.__CosineSimilarityCache = scoreB;
+			doca.cacheSimilarityData("CosineSimilarity", scoreA);
+			docb.cacheSimilarityData("CosineSimilarity", scoreB);
 
 			return scoreB - scoreA;
 		},
@@ -1426,11 +1551,11 @@
 			queryWeights = query.__VSMCache;
 		else {
 			var sqsum = 0;
-			for( let key of query.tf.getIterator() ){
-				queryWeights[ key ] = ( Math.log(query.tf[key]) + 1 ) * query.idf[ key ] || 0;
+			for( let key of query.getKeyIterator() ){
+				queryWeights[ key ] = ( Math.log(query.getTf(key)) + 1 ) * query.getiDf(key);
 				sqsum += queryWeights[ key ] * queryWeights[ key ];
 			}
-			for( let key of query.tf.getIterator() ){
+			for( let key of query.getKeyIterator() ){
 				queryWeights[key] = queryWeights[key] / sqsum;
 			}
 			query.__VSMCache = queryWeights;
@@ -1440,11 +1565,11 @@
 			docWeights = doc.__VSMCache;
 		else {
 			var sqsum = 0;
-			for( let key of doc.tokens.getIterator() ){
-				docWeights[ key ] = ( Math.log(doc.tokens[key].TermFreq) + 1 ) * query.idf[ key ] || 0;
+			for( let key of doc.getKeyIterator() ){
+				docWeights[ key ] = ( Math.log(doc.getTf(key)) + 1 ) * query.getiDf(key);
 				sqsum += docWeights[ key ] * docWeights[ key ];
 			}
-			for( let key of doc.tokens.getIterator() ){
+			for( let key of doc.getKeyIterator() ){
 				docWeights[key] = docWeights[key] / sqsum;
 			}
 			doc.__VSMCache = docWeights;

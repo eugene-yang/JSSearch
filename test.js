@@ -10,7 +10,7 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
 var engine = new JSSU.QueryProcessor( JSSU.LoadIndexHashTable("single") );
 
-log( engine.search("find my iPhone quick") )
+log( engine.search("financial institutions in federal government over $100000") )
 // engine.search("find my iPhone quick")
 
 
