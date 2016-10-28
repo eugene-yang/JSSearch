@@ -247,7 +247,7 @@
 				this.deleteAtTheEnd = true;
 
 			// initialize and open file pointer
-			this.fnd = ((ext == "tmp") ? JSSU.BufferPoolManager.tempDir : "") + id + "." + ext;
+			this.fnd = ((ext == "tmp") ? JSSU.BufferPoolManager.tempDir : JSSConst.GetConfig("index_output_directory")) + id + "." + ext;
 			this.FD = fs.openSync( this.fnd, 'w+' )
 		}
 
@@ -570,7 +570,7 @@
 
 			this.fire("documentAdded", doc);
 		},
-		toInvertedIndex: function(){
+		toInvertedIndex: function(threshold){
 			// drop document temp files along merging
 			// output an JSSU.IndexedList object with entries all flushed
 			// finalList.finalize()
@@ -590,7 +590,7 @@
 
 			
 			var indexHT = new JSSU.IndexHashTable( combinedIndex, this.meta );
-			indexHT.calculate();
+			indexHT.calculate(threshold);
 			
 			return indexHT;
 		},
@@ -766,8 +766,6 @@
 	JSSU.IndexHashTable = function(combinedIndex, metaData){
 		JSSU.Eventable.call(this);
 
-		
-
 		if( !( combinedIndex instanceof JSSU.IndexedList ) ){
 			// specified everything
 			var config = combinedIndex;
@@ -780,42 +778,41 @@
 			}
 		}
 
-		this._meta = metaData || null;
+		this.meta = metaData || null;
 
 		this.combinedIndex = this.combinedIndex || combinedIndex;
-		this.bufferManager = this.bufferManager || new JSSU.BufferManager( "indexHT",  JSSConst.IndexSchema.HashTable );
+		this.bufferManager = this.bufferManager || new JSSU.BufferManager( "indexHT_" + (new Date()).getTime(),  JSSConst.IndexSchema.HashTable );
 		this.ext = "index";
 		this.hashTable = {};
 		this.hashedEntryCounter = 0;
 		this.positionListBufferManager = this.positionListBufferManager || JSSU.PositionListBufferManager;
 	}
 	JSSU.IndexHashTable.prototype = {
-		calculate: function(){
+		calculate: function(threshold){
 			var counter = 0;
 			var postingHead = 0,
 				currentType = null,
-				currentTerm = null
-				//dfCounter = 0;
+				currentTerm = null,
+				dfThreshold = threshold || JSSConst.GetConfig("inverted_index_df_threshold") || 0; // minimum df
 
 			this.fire("buildInvertedIndexStarted")
 			for( let item of this.combinedIndex.getIterator() ){
 				if( item.Type !== currentType || item.Term !== currentTerm ){
 					if( counter > 0 ){ // push
 						if( isNaN(postingHead * this.combinedIndex.schemaLength) )debugger;
-						this.push({
-							Type: currentType,
-							Term: currentTerm,
-							DocFreq: counter - postingHead,
-							PostingPointer: postingHead * this.combinedIndex.schemaLength
-						})
+						if( counter - postingHead >= dfThreshold )
+							this.push({
+								Type: currentType,
+								Term: currentTerm,
+								DocFreq: counter - postingHead,
+								PostingPointer: postingHead * this.combinedIndex.schemaLength
+							})
 					}
 					// new term
 					postingHead = counter;
 					currentType = item.Type;
 					currentTerm = item.Term;
-					//dfCounter = 0;
 				}
-				//dfCounter++;
 				counter++;
 			}
 			this.fire("buildInvertedIndexDone")

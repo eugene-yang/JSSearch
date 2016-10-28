@@ -5,17 +5,18 @@
 	"temp_directory": "./_tmp/",
 	"stop_word_list": "./_data/stops.txt",
 	"preserve_temp_files": false,
-	"index_output_directory": "./",
-	"inverted_index_type": "single",
+	"index_output_directory": "./_indexes/",
+	"inverted_index_df_threshold": 2,
+	"inverted_index_type": "phrase",
 
-	"parse_single_term": true,
-	"exclude_stop_words": true,
+	"parse_single_term": false,
+	"exclude_stop_words": false,
 	"apply_stemmer": false,
-	"parse_phrase": false,
-	"phrase_accept_length": [2,3],
+	"parse_phrase": true,
+	"phrase_accept_length": [2,3,4],
 	"parse_special_term": false,
 
-	"default_index_with_position": true,
+	"default_index_with_position": false,
 
 	"similarity_measure": "BM25",
 
