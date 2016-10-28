@@ -28,6 +28,7 @@
 		this.df = {};
 		this.idf = {};
 		this.tf = {};
+		this.ttf = {};
 
 		this._cache = new Map();
 
@@ -46,15 +47,22 @@
 			yield* this.tf.getIterator();
 		},
 		addDfByKey: function(df){
-			var key = [...arguments].slice(1)
+			var key = ToKey([...arguments].slice(1))
 			this.df[ key ] = df;
 			// smoothed id
 			this.idf[ key ] = Math.log( this._processor.documentCount - df + 0.5 ) - Math.log( df + 0.5 ) 
+		},
+		addTtfByKey: function(ttf){
+			var key = ToKey([...arguments].slice(1))
+			this.ttf[ key ] = ttf;
 		},
 		getTf: function(){ return this.tf[ ToKey([...arguments]) ] || 0.5; },
 		getiDf: function(){ 
 			return this.idf[ ToKey([...arguments]) ] || 
 					Math.log( this._processor.documentCount + 0.5 ) - Math.log( 0.5 ) ; 
+		},
+		getTtf: function(){ 
+			return this.ttf[ ToKey([...arguments]) ] || 0.5;
 		},
 
 
@@ -235,7 +243,11 @@
 			// tf and document length
 			// need # of terms in the entire collection -> length of inverted index
 			// length of positing given term
-			
+			if( !doca.hasSimilarityData("LMSimilarity") )
+				doca.cacheSimilarityData("LMSimilarity", _LM_DS_Score(query, doca) );
+			if( !docb.hasSimilarityData("LMSimilarity") )
+				docb.cacheSimilarityData("LMSimilarity", _LM_DS_Score(query, docb) );
+			return docb.cacheSimilarityData("LMSimilarity") - doca.cacheSimilarityData("LMSimilarity")
 		}
 	}
 	function _VSMWeights(query, doc){
@@ -293,6 +305,22 @@
 		}
 		return sum;
 	}
+	var collection_size = undefined;
+	function _LM_DS_Score(query, doc){
+		var index = query._processor.index;
+		if( !collection_size ){
+			collection_size = 0;
+			for( let doc of Object.keys(index.meta.length) ){ collection_size += index.meta.length[doc] }
+		}
+
+		var mu = JSSConst.GetConfig("LM_Dirichlet_mu");
+		var sum = 0;
+		for( let key of query.getKeyIterator() ){
+			// log( doc.getTf(key) / index.meta.length[doc.DocId] )
+			sum += Math.log( (doc.getTf(key) + mu*query.getTtf(key)/collection_size) / (index.meta.length[doc.DocId] + mu) )
+		}
+		return sum;
+	}
 
 	JSSQueryProcessor.LoadIndexHashTable = JSSU.LoadIndexHashTable;
 	JSSQueryProcessor.QueryProcessor = function(index, config){
@@ -330,11 +358,16 @@
 			var resultByDocs = new JSSQueryProcessor.SearchResultSet(this, query);
 			for( var i=0; i<resultByTokens.length; i++ ){
 				var token = resultByTokens[i];
+				var ttf = 0;
 				for( var j=0; j<token.Posting.length; j++ ){
 					if( resultByDocs.findDoc( token.Posting[j].DocumentId ) === undefined )
 						resultByDocs.addSearchResult( token.Posting[j].DocumentId );
 					resultByDocs.findDoc( token.Posting[j].DocumentId ).result.addToken( token.Posting[j] )
+
+					// count tf under collection(ttf) for LM
+					ttf += token.Posting[j].TermFreq;
 				}
+				query.addTtfByKey(ttf, token.Term, token.Type);
 			}
 			
 			// sort by similarity using sorting function and call similarity functions

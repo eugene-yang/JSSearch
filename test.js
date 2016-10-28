@@ -10,7 +10,7 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
 var engine = new JSSQueryProcessor.QueryProcessor( "./single" );
 
-var result = engine.search("financial institutions in federal government over $100000", {similarity: "BM25"} ) 
+var result = engine.search("financial institutions in federal government over $100000", {similarity: "LM"} ) 
 
 var flat = [];
 for( let re of result.getIterator() ){
