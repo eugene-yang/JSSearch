@@ -10,11 +10,16 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
 var engine = new JSSQueryProcessor.QueryProcessor( "./single" );
 
-var result = engine.search("financial institutions in federal government over $100000") 
+var result = engine.search("financial institutions in federal government over $100000", {similarity: "BM25"} ) 
 
+var flat = [];
 for( let re of result.getIterator() ){
-	console.log( re.DocId );
+	flat.push({
+		DocId: re.DocId,
+		similarity: [...re._cache]
+	})
 }
+log( flat );
 
 // engine.search("find my iPhone quick")
 

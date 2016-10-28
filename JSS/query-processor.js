@@ -14,6 +14,9 @@
 }(this, function(root, JSSConst, JSSU , JSSQueryProcessor){
 
 	JSSQueryProcessor = JSSQueryProcessor || {};
+
+	// for debug
+	var log = obj => console.log(JSON.stringify(obj, null, 2))
 	
 	var ToKey = function(){ return [...arguments].join( JSSConst.TokenTypeSeparator ) };
 	var DecodeTokenKey = key => ( key.split( JSSConst.TokenTypeSeparator ) )
@@ -222,19 +225,25 @@
 			// need tf and idf and count of document
 			// average document length and length of each document
 			// also need some hyper parameters
+			if( !doca.hasSimilarityData("BM25Similarity") )
+				doca.cacheSimilarityData("BM25Similarity", _BM25Score(query, doca) );
+			if( !docb.hasSimilarityData("BM25Similarity") )
+				docb.cacheSimilarityData("BM25Similarity", _BM25Score(query, docb) );
+			return docb.cacheSimilarityData("BM25Similarity") - doca.cacheSimilarityData("BM25Similarity")
 		},
 		LM: function(query, doca, docb){
 			// tf and document length
 			// need # of terms in the entire collection -> length of inverted index
 			// length of positing given term
+			
 		}
 	}
 	function _VSMWeights(query, doc){
 		// save cache on instance
 		// calculate query weights
 		var queryWeights = {};
-		if( !!query.__VSMCache )
-			queryWeights = query.__VSMCache;
+		if( query.hasSimilarityData("VSMCache") )
+			queryWeights = query.cacheSimilarityData("VSMCache");
 		else {
 			var sqsum = 0;
 			for( let key of query.getKeyIterator() ){
@@ -247,8 +256,8 @@
 			query.__VSMCache = queryWeights;
 		}
 		var docWeights = {};
-		if( !!doc.__VSMCache )
-			docWeights = doc.__VSMCache;
+		if( !!doc.hasSimilarityData("VSMCache") )
+			docWeights = doc.cacheSimilarityData("VSMCache");
 		else {
 			var sqsum = 0;
 			for( let key of doc.getKeyIterator() ){
@@ -266,12 +275,29 @@
 			doc: docWeights
 		}
 	}
+	var avgdl = undefined;
+	function _BM25Score(query, doc){
+		var index = query._processor.index;
+		if( !avgdl ){
+			// calculate parameter
+			avgdl = 0;
+			for( let doc of Object.keys(index.meta.length) ){ avgdl += index.meta.length[doc] }
+			avgdl = avgdl / Object.keys(index.meta.length).length;
+		}
+		var param = JSSConst.GetConfig("BM25_parameters")
+		var K = param.k1 * ( 1 - param.b + param.b*index.meta.length[doc.DocId]/avgdl )
+		var sum = 0;
+		for( let key of query.getKeyIterator() ){
+			sum += ( query.getiDf(key) * ( ((param.k1+1)*doc.getTf(key))/(doc.getTf(key)+K) *
+					 					   (1+query.getTf(key)/(param.k2+query.getTf(key)))   ) );
+		}
+		return sum;
+	}
 
 	JSSQueryProcessor.LoadIndexHashTable = JSSU.LoadIndexHashTable;
 	JSSQueryProcessor.QueryProcessor = function(index, config){
 		if( !(index instanceof JSSU.IndexHashTable) ){
 			var index = JSSU.LoadIndexHashTable.apply({}, index instanceof Array ? index : [index]);
-			// throw new TypeError("index should be JSSU.IndexHashTable");
 		}
 
 		this.index = index;

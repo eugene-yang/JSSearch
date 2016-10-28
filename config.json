@@ -17,5 +17,11 @@
 
 	"default_index_with_position": true,
 
-	"similarity_measure": "Cosine"
+	"similarity_measure": "BM25",
+
+	"BM25_parameters": {
+		"k1": 1.2,
+		"k2": 500,
+		"b": 0.75
+	}
 }
