@@ -234,8 +234,8 @@
 			try {
 				var meta = JSON.parse( fs.readFileSync(fnd + ".meta", "utf8") );
 				this._meta = meta;
-				if( !!this._parent )
-					this._parent.meta = this._meta;
+				if( this._parent != undefined )
+					this._parent.meta = meta;
 			} catch(e){}
 		}
 		else{
@@ -438,7 +438,7 @@
 
 			var str = "";
 			while( true ){
-				str += this._read( offset, this.defaultReadChunck );
+				str += this._read( offset-1, this.defaultReadChunck );
 				if( str.have( this.separator ) ){
 					str = str.split( this.separator )[0];
 					return str;
@@ -530,11 +530,14 @@
 		}
 		JSSU.PositionListBufferManager.parseString = function(string){
 			var rawList = string.split(",");
-			var ret = [];
-			while(rawList.length > 0){
-				ret.push( [ parseInt(rawList.shift()), parseInt(rawList.shift()) ] );
-			}
-			return ret;
+			// var ret = [];
+			// while(rawList.length > 0){
+			// 	ret.push( [ parseInt(rawList.shift()), parseInt(rawList.shift()) ] );
+			// }
+			// return ret;
+			for( var i=0; i<rawList.length; i++ ){ rawList[i] = parseInt(rawList[i]) }
+			log( string )
+			return rawList;
 		}
 	}
 	JSSU.createPositionListBufferManager = function(){
@@ -778,7 +781,7 @@
 			}
 		}
 
-		this.meta = metaData || null;
+		this.meta = metaData || this.meta || null;
 
 		this.combinedIndex = this.combinedIndex || combinedIndex;
 		this.bufferManager = this.bufferManager || new JSSU.BufferManager( "indexHT_" + (new Date()).getTime(),  JSSConst.IndexSchema.HashTable );
@@ -1081,7 +1084,7 @@
 			else {
 				position = obj
 				if( !!obj.index )
-					position = [ obj.index, obj.index + obj[0].length - 1 ]
+					position = obj.index
 
 				if( !(target[key] instanceof Array) )
 					target[key] = [];
@@ -1132,7 +1135,7 @@
 			}
 			while( (match=JSSConst.RE.URL.general.exec(this.txt)) != null ){
 				url = match[0];
-				this._addPosition(res.URL, url, [match.index, match.index + url.length - 1]);
+				this._addPosition(res.URL, url, match.index);
 				while( (p = JSSConst.RE.URL.Protocol.exec(url) ) !== null ){
 					p = p[0].replace("://", "")
 					this._addPosition(res.protocol, p, [match.index, match.index + p.length - 1]);
@@ -1172,8 +1175,8 @@
 				add = match[0];
 				this._addPosition( res.address, add, match );
 				sp = add.split("@");
-				this._addPosition( res.username, sp[0], [match.index, match.index + sp[0].length - 1] )
-				this._addPosition( res.server, sp[1], [match.index + sp[0].length + 1, match.index + sp[0].length + sp[1].length] )
+				this._addPosition( res.username, sp[0], match.index )
+				this._addPosition( res.server, sp[1], match.index + sp[0].length + 1 )
 				eatSet.push( match )
 			}
 			this._eatTxt(eatSet);
@@ -1184,7 +1187,7 @@
 				eatSet = new JSSU.eatSet();
 			while( (match = JSSConst.RE.FileExtension.exec(this.txt)) != null ){
 				var fn = match[0].split(".");
-				this._addPosition( res, fn[1], [match.index + fn[0].length, match.index + match[0].length - 1 ] )
+				this._addPosition( res, fn[1], match.index + fn[0].length )
 				eatSet.push( match )
 			}
 			// don't eat the word, save for url parsing
@@ -1210,7 +1213,7 @@
 				(/\d\s?(st|nd|th)/).test(dat) && ( dat = dat.replace(/(st|nd|th)/, "") );
 				if( !isNaN(Date.parse(dat)) ){
 					// Only use the date part, so set to GMT
-					this._addPosition( res, (new Date(dat + " GMT")).toISOString(), [match.index, match.index + dat.length - 1] )
+					this._addPosition( res, (new Date(dat + " GMT")).toISOString(), match )
 					eatSet.push( match )
 				}
 			}
@@ -1229,12 +1232,12 @@
 				if( parts[0].length >= 3 )
 					mix.push( { 
 						word: this.config["apply_stemmer"] ? JSSU.stemmer(parts[0]) : parts[0], 
-						pos: [match.index, match.index + parts[0].length - 1] 
+						pos: match.index 
 					} )
 				if( parts[1].length >= 3 )
 					mix.push( { 
 						word: this.config["apply_stemmer"] ? JSSU.stemmer(parts[1]) : parts[1], 
-						pos: [match.index + parts[0].length, match.index + elem.length - 1] 
+						pos: match.index + parts[0].length
 					} )
 
 			}
@@ -1242,13 +1245,16 @@
 		},
 		parseGeneralWord: function(){
 			var res = [],
-				revisedText = this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " ");
+				revisedText = this.txt.replace(/[\,\.\-_\!\?]/ig, "").replace(/[\///\(\)]/ig, " "),
+				counter = 0;
+			
 			while( (match = JSSConst.RE.GeneralWord.exec(revisedText)) != null ){
 				if( !this.config["exclude_stop_words"] || JSSU.stopFilter(match[0]) )
 					res.push({
 						word: this.config["apply_stemmer"] ? JSSU.stemmer(match[0]) : match[0], 
-						pos: [match.index, match.index + match[0].length -1 ]
+						pos: counter
 					})
+				counter++;
 			}
 			return res;
 		},
@@ -1268,7 +1274,7 @@
 						var word = piece.slice( i-len+1, i+1 ).join(" "),
 							m = word.match(/[\\\/@#\*\^-_\[\]\{\}\|\+\=&%~]|[0-9]/g );
 						if( !m || m.length == 0)
-							res.push({word: word, pos: [-1,-1]})
+							res.push({word: word, pos: -1})
 					}
 				}
 			}

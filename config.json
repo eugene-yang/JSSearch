@@ -7,16 +7,16 @@
 	"preserve_temp_files": false,
 	"index_output_directory": "./_indexes/",
 	"inverted_index_df_threshold": 2,
-	"inverted_index_type": "phrase",
+	"inverted_index_type": "single",
 
-	"parse_single_term": false,
-	"exclude_stop_words": false,
+	"parse_single_term": true,
+	"exclude_stop_words": true,
 	"apply_stemmer": false,
-	"parse_phrase": true,
+	"parse_phrase": false,
 	"phrase_accept_length": [2,3,4],
 	"parse_special_term": false,
 
-	"default_index_with_position": false,
+	"default_index_with_position": true,
 
 	"similarity_measure": "BM25",
 
