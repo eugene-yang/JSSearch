@@ -7,18 +7,18 @@
 	"preserve_temp_files": false,
 	"index_output_directory": "./_indexes/",
 	"inverted_index_df_threshold": 2,
-	"inverted_index_type": "positional",
+	"inverted_index_type": "single",
 
 	"preprocessing_settings":{
 		"parse_single_term": true,
-		"exclude_stop_words": false,
+		"exclude_stop_words": true,
 		"apply_stemmer": false,
 		"parse_phrase": false,
 		"phrase_accept_length": [2,3,4],
-		"parse_special_term": false
+		"parse_special_term": true
 	},
 
-	"default_index_with_position": true,
+	"default_index_with_position": false,
 
 	"query_settings": {
 		"similarity_measure": "BM25",

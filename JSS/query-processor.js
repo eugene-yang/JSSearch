@@ -111,8 +111,12 @@
 		this._TfSet = new Map();
 		this._postingMatched = new Map();
 		this.DocId = DocId;
+		this.priority = 0;
 	}
 	JSSQueryProcessor.SearchResult.prototype = {
+		setPriority: function(p){
+			this.priority = p;
+		},
 		addToken: function(tf){
 			if( typeof(tf) == 'number' ){
 				var argv = [...arguments].slice(1);
@@ -158,6 +162,7 @@
 		this._set = new Map(); 
 		// convert to array when sort 
 		this._sorted = null;
+		this.similarity = null;
 	}
 	JSSQueryProcessor.SearchResultSet.prototype = {
 		// initializing
@@ -167,12 +172,20 @@
 			this._set.set( result.DocId, result );
 		},
 		// utilities
+		setPriority: function(p){
+			for( let re of this.getIterator() ){
+				re.setPriority(p);
+			}
+		},
 		toDocumentSet: function(){
 			// convert to document set for further search
 		},
 		getIterator: function*(){
-			if( this._sorted == null )
-				yield* this._set;
+			if( this._sorted == null ){
+				for( let re of this._set ){
+					yield re[1];
+				}
+			}
 			else{
 				yield* this._sorted;
 			}
@@ -192,10 +205,15 @@
 		rankBy: function(simMeasure){
 			// bind similarity function
 			// gives error if similarity does not exist
+			this.similarity = simMeasure;
 			var simMeasure = JSSQueryProcessor.Similarity[ simMeasure ].bind(this._processor.index, this._query); 
 
 			this._sorted = [...this._set.values()]
-			this._sorted.sort( simMeasure );
+			this._sorted.sort(function(a,b){
+				if( a.priority != b.priority )
+					return b.priority - a.priority;
+				return simMeasure(a,b);
+			});
 		},
 
 		// after sorting
@@ -212,8 +230,36 @@
 		},
 		
 	}
-	JSSQueryProcessor.SearchResultSet.merge = function(){
-		// for merging result sets when distributes engines
+	Object.defineProperties(JSSQueryProcessor.SearchResultSet, {
+		originalQuery: {
+			get: function(){ return this._query.string.getRawText(); }
+		},
+		ranked: {
+			get: function(){ return this._sorted != null; }
+		}
+	})
+	JSSQueryProcessor.SearchResultSet.merge = function(seta, setb, similarity){
+		// Check for mergable
+		if( seta.originalQuery != setb.originalQuery )
+			throw TypeError("Two Search Result Sets are not mergable");
+		if( seta.similarity != setb.similarity && similarity === undefined )
+			throw new Error("Similarity measure not specified");
+		similarity = similarity || seta.similarity;
+
+		if( seta.ranked == false || seta.similarity != similarity )
+			seta.rankBy( similarity );
+		if( setb.ranked == false || setb.similarity != similarity )
+			setb.rankBy( similarity );
+
+		var merged = new JSSQueryProcessor.SearchResultSet("mix", seta.query);
+		for( let result of seta.getIterator() ){
+			merged.addSearchResult( result );
+		}
+		for( let result of setb.getIterator() ){
+			merged.addSearchResult( result );
+		}
+		merged.rankBy( similarity );
+		return merged;
 	}
 
 	// Calculate similarity of query and document
@@ -427,9 +473,7 @@
 			var phraseResultSet = new JSSQueryProcessor.SearchResultSet(this, query);
 
 
-			for( let pair of rawResultSet.getIterator() ){
-
-				var rawResult = pair[1];
+			for( let rawResult of rawResultSet.getIterator() ){
 				var phraseResult = new JSSQueryProcessor.SearchResult( rawResult.DocId );
 
 				// get positional list
