@@ -470,15 +470,7 @@
 			var FD = fs.openSync( fnd, 'w+' )
 			fs.writeSync( FD, JSON.stringify({
 				schema: this.schema,
-				config: {
-					"parse_single_term": JSSConst.GetConfig("parse_single_term"),
-					"exclude_stop_words": JSSConst.GetConfig("exclude_stop_words"),
-					"apply_stemmer": JSSConst.GetConfig("apply_stemmer"),
-					"parse_phrase": JSSConst.GetConfig("parse_phrase"),
-					"phrase_accept_length": JSSConst.GetConfig("phrase_accept_length"),
-					"parse_special_term": JSSConst.GetConfig("parse_special_term"),
-					"default_index_with_position": JSSConst.GetConfig("default_index_with_position")
-				}
+				config: JSSConst.GetConfig("preprocessing_settings")
 			}) )
 			fs.close(FD)
 		},
@@ -978,7 +970,7 @@
 	JSSU.String.prototype = {
 		tokenize: function(){
 			if( typeof this._cache.token === 'undefined' )
-				this._cache.token = JSSU.tokenize(this.text, this.config.tokenType)
+				this._cache.token = JSSU.tokenize(this.text, null,this.config.tokenType)
 			return this._cache.token;
 		},
 		getFlatIterator: function*(obj, type){
@@ -1057,10 +1049,10 @@
 
 		this.config = config || {};
 
-		var settingList = ["parse_single_term","exclude_stop_words","apply_stemmer","parse_phrase","phrase_accept_length","parse_special_term"]
+		var settingList = Object.keys( JSSConst.GetConfig("preprocessing_settings") )
 
 		for( let se of settingList ){
-			this.config[se] = this.config[se] === undefined ? JSSConst.GetConfig(se) : this.config[se];
+			this.config[se] = this.config[se] === undefined ? JSSConst.GetConfig("preprocessing_settings",se) : this.config[se];
 		}
 	}
 	JSSU.DefaultTokenizer.prototype = {
@@ -1097,7 +1089,6 @@
 		},
 		run: function(){
 			// run all type identifiers in proper sequence
-
 			if( this.config["parse_phrase"] ){
 				this._addPosition( this.tokens.phrase, this.parsePhrase() )
 				//log( this.tokens.phrase );

@@ -18,7 +18,7 @@
 	// for debug
 	var log = obj => console.log(JSON.stringify(obj, null, 2))
 	
-	var ToKey = function(){ return [...arguments].join( JSSConst.TokenTypeSeparator ) };
+	var ToKey = function(v){ return (v instanceof Array?v:[...arguments]).join( JSSConst.TokenTypeSeparator ) };
 	var DecodeTokenKey = key => ( key.split( JSSConst.TokenTypeSeparator ) )
 
 	JSSQueryProcessor.Query = function(string, processor, config){
@@ -29,14 +29,27 @@
 		this.idf = {};
 		this.tf = {};
 		this.ttf = {};
+		this.pos = [];
 
 		this._cache = new Map();
 
-		this.string = new JSSU.String( string );
-		
+		if( config.proximity === true ){
+			// need to have phrase_size(int), max_dis(int) in config and gave default values before hand
+			var tokenType = JSSConst.GetConfig("preprocessing_settings")
+			for( let se of Object.keys(tokenType) ){ tokenType[ se ] = false; }
+			tokenType["parse_single_term"] = true
+			this.string = new JSSU.String( string, { tokenType: tokenType } );
+		}
+		else {
+			this.string = new JSSU.String( string, { tokenType: this.config } );
+		}
+
 		// create term frequency list
 		for( let token of this.getTokenIterator() ){
-			this.tf[ ToKey([token.term, token.type]) ] = token.post.length;
+			this.tf[ ToKey(token.term, token.type) ] = token.post.length;
+			for( let p of token.post ){
+				this.pos[ p ] = ToKey(token.term, token.type)
+			}
 		}
 	}
 	JSSQueryProcessor.Query.prototype = {
@@ -92,7 +105,7 @@
 	JSSQueryProcessor.SearchResult = function(DocId){
 		this._cache = new Map();
 		this._TfSet = new Map();
-		this._postingMatched = []
+		this._postingMatched = new Map();
 		this.DocId = DocId;
 	}
 	JSSQueryProcessor.SearchResult.prototype = {
@@ -103,7 +116,7 @@
 			}
 			else {
 				// send posting element directly
-				this._postingMatched.push(tf);
+				this._postingMatched.set( ToKey([tf.Term, tf.Type]), tf);
 				this._TfSet.set( ToKey([tf.Term, tf.Type]), tf.TermFreq );
 			}
 		},
@@ -297,7 +310,7 @@
 			avgdl = avgdl / Object.keys(index.meta.length).length;
 			query._processor.avgdl = avgdl;
 		}
-		var param = JSSConst.GetConfig("BM25_parameters")
+		var param = JSSConst.GetConfig("query_settings","BM25_parameters")
 		var K = param.k1 * ( 1 - param.b + param.b*index.meta.length[doc.DocId]/avgdl )
 		var sum = 0;
 		for( let key of query.getKeyIterator() ){
@@ -315,7 +328,7 @@
 			query._processor.collection_size = collection_size;
 		}
 
-		var mu = JSSConst.GetConfig("LM_Dirichlet_mu");
+		var mu = JSSConst.GetConfig("query_settings","LM_Dirichlet_mu");
 		var sum = 0;
 		for( let key of query.getKeyIterator() ){
 			// log( doc.getTf(key) / index.meta.length[doc.DocId] )
@@ -334,18 +347,14 @@
 		this.index.load();
 
 		this.config = config || {};
-		this.config.similarity = this.config.similarity || JSSConst.GetConfig("similarity_measure");
+		this.config.similarity = this.config.similarity || JSSConst.GetConfig("query_settings","similarity_measure");
 		this.config.query = {
 			tokenType : this.index.configFromFile
 		}
 		this.documentCount = Object.keys(this.index.meta.length).length;
 	}
 	JSSQueryProcessor.QueryProcessor.prototype = {
-		_retrieveDocs: function(query, config){
-			var config = config || {};
-
-			if( !(query instanceof JSSQueryProcessor.Query) )
-				query = new JSSQueryProcessor.Query(query, this, this.config.query);
+		_retrieveDocs: function(query){
 
 			var resultByTokens = [];
 			for( let token of query.getTokenIterator() ){
@@ -374,8 +383,13 @@
 			return resultByDocs;
 		},
 		search: function(query, config){
+			var config = config || {};
+			
+			if( !(query instanceof JSSQueryProcessor.Query) )
+				query = new JSSQueryProcessor.Query(query, this, this.config.query);
+			
 			// get document set
-			var resultSet = this._retrieveDocs(query, config);
+			var resultSet = this._retrieveDocs(query);
 			
 			// sort by similarity using sorting function and call similarity functions
 			resultSet.rankBy( config.similarity || this.config.similarity );
@@ -383,6 +397,31 @@
 			return resultSet;
 		},
 		proximitySearch: function(query, config){
+			var config = config || {};
+			// need to have phrase_size(int), max_dis(int) in config and gave default values before hand
+			config.phrase_size = config.phrase_size || JSSConst.GetConfig("query_settings", "proximity_phrase_size");
+			config.max_dis = config.max_dis || JSSConst.GetConfig("query_settings", "proximity_max_dis");
+			config.sequence = config.sequence || JSSConst.GetConfig("query_settings", "proximity_sequence") || true;
+			config.proximity = true
+
+			// create new query instance anyway
+			if( query instanceof JSSQueryProcessor.Query )
+				query = query.string.getRawText();
+			query = new JSSQueryProcessor.Query(query, this, config);
+
+			var rawResultSet = this._retrieveDocs(query),
+				termResultSet = new JSSQueryProcessor.SearchResultSet(this, query),
+				termList = query.pos;
+
+			for( let rawResult of rawResultSet.getIterator() ){
+				var termResult = new JSSQueryProcessor.SearchResult( rawResult.DocId );
+				for( let key of query.getKeyIterator() ){
+					// test every possible phrases
+					for( var i=config.phrase_size-1; i<termList.length; i++ ){
+						// phrase: i-config.phrase_size+1 ~ i
+					}
+				}
+			}
 
 		},
 

@@ -7,23 +7,31 @@
 	"preserve_temp_files": false,
 	"index_output_directory": "./_indexes/",
 	"inverted_index_df_threshold": 2,
-	"inverted_index_type": "single",
+	"inverted_index_type": "temp",
 
-	"parse_single_term": true,
-	"exclude_stop_words": true,
-	"apply_stemmer": false,
-	"parse_phrase": false,
-	"phrase_accept_length": [2,3,4],
-	"parse_special_term": false,
+	"preprocessing_settings":{
+		"parse_single_term": true,
+		"exclude_stop_words": false,
+		"apply_stemmer": false,
+		"parse_phrase": false,
+		"phrase_accept_length": [2,3,4],
+		"parse_special_term": false
+	},
 
 	"default_index_with_position": true,
 
-	"similarity_measure": "BM25",
+	"query_settings": {
+		"similarity_measure": "BM25",
 
-	"BM25_parameters": {
-		"k1": 1.2,
-		"k2": 500,
-		"b": 0.75
-	},
-	"LM_Dirichlet_mu": 0.2
+		"BM25_parameters": {
+			"k1": 1.2,
+			"k2": 500,
+			"b": 0.75
+		},
+		"LM_Dirichlet_mu": 0.2,
+
+		"proximity_phrase_size": 2,
+		"proximity_max_dis": 2,
+		"proximity_sequence": true
+	}
 }

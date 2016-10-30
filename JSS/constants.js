@@ -17,7 +17,15 @@
 
 	// TODO: Add method for non-nodejs environment
 	JSSConst.Config = JSON.parse( require("fs").readFileSync("./config.json") );
-	JSSConst.GetConfig = (key) => JSSConst.Config[key];
+	JSSConst.GetConfig = function(){
+		var argv = [...arguments];
+		var result = JSSConst.Config;
+		for( let k of argv ){
+			result = result[k]
+		}
+		// ensure not to change anything in Config object
+		return JSON.parse( JSON.stringify(result) );
+	}
 	
 	JSSConst.SpecialChars = [['&aacute;','a'], ['&agrave;','a'], ['&amp;','&'], ['&atilde;','a'], ['&blank;',' '], ['&bull;','•'], ['&ccedil;','c'], ['&cent;','c'], ['&cir;','○'], ['&eacute;','e'], ['&egrave;','e'], ['&ge;','≥'], ['&gt;','>'], ['&hyph;','-'], ['&iacute;','i'], ['&lt;','<'], ['&mu;','u'], ['&ntilde;','n'], ['&oacute;','o'], ['&ocirc;','o'], ['&para;','¶'], ['&racute;','r'], ['&reg;','®'], ['&rsquo;','\''], ['&sect;','§'], ['&times;','×'], ['&uuml;','u']],
 	
