@@ -287,14 +287,15 @@
 			doc: docWeights
 		}
 	}
-	var avgdl = undefined;
 	function _BM25Score(query, doc){
 		var index = query._processor.index;
-		if( !avgdl ){
+		var avgdl = query._processor.avgdl;
+		if( avgdl === undefined ){
 			// calculate parameter
 			avgdl = 0;
 			for( let doc of Object.keys(index.meta.length) ){ avgdl += index.meta.length[doc] }
 			avgdl = avgdl / Object.keys(index.meta.length).length;
+			query._processor.avgdl = avgdl;
 		}
 		var param = JSSConst.GetConfig("BM25_parameters")
 		var K = param.k1 * ( 1 - param.b + param.b*index.meta.length[doc.DocId]/avgdl )
@@ -305,12 +306,13 @@
 		}
 		return sum;
 	}
-	var collection_size = undefined;
 	function _LM_DS_Score(query, doc){
 		var index = query._processor.index;
-		if( !collection_size ){
+		var collection_size = query._processor.collection_size;
+		if( collection_size === undefined ){
 			collection_size = 0;
 			for( let doc of Object.keys(index.meta.length) ){ collection_size += index.meta.length[doc] }
+			query._processor.collection_size = collection_size;
 		}
 
 		var mu = JSSConst.GetConfig("LM_Dirichlet_mu");
@@ -339,7 +341,7 @@
 		this.documentCount = Object.keys(this.index.meta.length).length;
 	}
 	JSSQueryProcessor.QueryProcessor.prototype = {
-		search: function(query, config){
+		_retrieveDocs: function(query, config){
 			var config = config || {};
 
 			if( !(query instanceof JSSQueryProcessor.Query) )
@@ -369,12 +371,21 @@
 				}
 				query.addTtfByKey(ttf, token.Term, token.Type);
 			}
-			
-			// sort by similarity using sorting function and call similarity functions
-			resultByDocs.rankBy( config.similarity || this.config.similarity );
-
 			return resultByDocs;
 		},
+		search: function(query, config){
+			// get document set
+			var resultSet = this._retrieveDocs(query, config);
+			
+			// sort by similarity using sorting function and call similarity functions
+			resultSet.rankBy( config.similarity || this.config.similarity );
+
+			return resultSet;
+		},
+		proximitySearch: function(query, config){
+
+		},
+
 	}
 
 	return JSSQueryProcessor;
