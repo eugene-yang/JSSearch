@@ -46,7 +46,7 @@
 			this.string = new JSSU.String( string, { tokenType: tokenType } );
 		}
 		else {
-			this.string = new JSSU.String( string, { tokenType: this.config } );
+			this.string = new JSSU.String( string, this.config );
 		}
 
 		// create term frequency list
@@ -410,7 +410,7 @@
 			// need to have phrase_size(int), max_dis(int) in config and gave default values before hand
 			config.phrase_size = config.phrase_size || JSSConst.GetConfig("query_settings", "proximity_phrase_size");
 			config.max_dis = config.max_dis || JSSConst.GetConfig("query_settings", "proximity_max_dis");
-			config.sequence = config.sequence || JSSConst.GetConfig("query_settings", "proximity_sequence") || true;
+			config.sequence = config.sequence !== undefined ? config.sequence : JSSConst.GetConfig("query_settings", "proximity_sequence");
 			config.proximity = true
 
 			// create new query instance to find single term
@@ -426,7 +426,7 @@
 			query = new JSSQueryProcessor.Query(query.string.getRawText(), this, config);
 			var phraseResultSet = new JSSQueryProcessor.SearchResultSet(this, query);
 
-			
+
 			for( let pair of rawResultSet.getIterator() ){
 
 				var rawResult = pair[1];
@@ -446,10 +446,11 @@
 					// test every possible phrases
 					var posList = rawResult._postingMatched.get(ToKey(pivot,"word")).positionalList,
 						tfCounter = 0;
+
 					for( let pos of posList ){
-						var checkList = termList.slice(0,-1)
 						if( config.sequence == true ){
 							// with sequence
+							var checkList = termList.slice(0,-1)
 							for( var j=pos-config.max_dis; j<pos; j++ ){
 								var pre = rawResult._postingMatched.get(ToKey(checkList[0],"word"));
 								if( pre != undefined && pre.positionalList.indexOf(j) > -1 ){
@@ -461,6 +462,21 @@
 						}
 						else {
 							// omit sequence
+							for( var j=pos-config.max_dis; j<=pos; j++ ){
+								var checkList = termList.slice(0);
+								for( var k=j; k<=j+config.max_dis; k++ ){
+									// check term
+									for( let t of checkList ){
+										var pre = rawResult._postingMatched.get(ToKey(t,"word"));
+										if( pre != undefined && pre.positionalList.indexOf(k) > -1 ){
+											checkList.splice( checkList.indexOf(t), 1 );
+											break;
+										}
+									}
+								}
+								if( checkList.length == 0 )
+									tfCounter++;
+							}
 						}
 					}
 

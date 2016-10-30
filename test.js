@@ -23,6 +23,8 @@ var engine = new JSSQueryProcessor.QueryProcessor( "./_indexes/positional" );
 
 // engine.search("find my iPhone quick")
 
-engine.proximitySearch("Federal Programs")
+// engine.search("Potential applicants should have already contacted their State Single Point of Contact ")
+
+engine.proximitySearch("programs federal",{sequence:false})
 
 debugger

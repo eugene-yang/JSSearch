@@ -32,6 +32,6 @@
 
 		"proximity_phrase_size": 2,
 		"proximity_max_dis": 1,
-		"proximity_sequence": true
+		"proximity_sequence": false
 	}
 }
