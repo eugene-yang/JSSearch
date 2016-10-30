@@ -29,15 +29,20 @@
 		this.idf = {};
 		this.tf = {};
 		this.ttf = {};
-		this.pos = [];
 
 		this._cache = new Map();
 
-		if( config.proximity === true ){
-			// need to have phrase_size(int), max_dis(int) in config and gave default values before hand
+		if( config.proximity === true && config.preprocess == true ){
 			var tokenType = JSSConst.GetConfig("preprocessing_settings")
 			for( let se of Object.keys(tokenType) ){ tokenType[ se ] = false; }
 			tokenType["parse_single_term"] = true
+			this.string = new JSSU.String( string, { tokenType: tokenType } );
+		}
+		else if( config.proximity === true && config.preprocess == false ){
+			var tokenType = JSSConst.GetConfig("preprocessing_settings")
+			for( let se of Object.keys(tokenType) ){ tokenType[ se ] = false; }
+			tokenType["parse_phrase"] = true
+			tokenType["phrase_accept_length"] = [ config.phrase_size ]
 			this.string = new JSSU.String( string, { tokenType: tokenType } );
 		}
 		else {
@@ -47,9 +52,6 @@
 		// create term frequency list
 		for( let token of this.getTokenIterator() ){
 			this.tf[ ToKey(token.term, token.type) ] = token.post.length;
-			for( let p of token.post ){
-				this.pos[ p ] = ToKey(token.term, token.type)
-			}
 		}
 	}
 	JSSQueryProcessor.Query.prototype = {
@@ -61,15 +63,17 @@
 		},
 		addDfByKey: function(df){
 			var key = ToKey([...arguments].slice(1))
+			df = parseInt(df);
 			this.df[ key ] = df;
 			// smoothed id
 			this.idf[ key ] = Math.log( this._processor.documentCount - df + 0.5 ) - Math.log( df + 0.5 ) 
 		},
 		addTtfByKey: function(ttf){
 			var key = ToKey([...arguments].slice(1))
-			this.ttf[ key ] = ttf;
+			this.ttf[ key ] = parseInt(ttf);
 		},
 		getTf: function(){ return this.tf[ ToKey([...arguments]) ] || 0.5; },
+		getDf: function(){ return this.df[ ToKey([...arguments]) ] || 0.5 },
 		getiDf: function(){ 
 			return this.idf[ ToKey([...arguments]) ] || 
 					Math.log( this._processor.documentCount + 0.5 ) - Math.log( 0.5 ) ; 
@@ -141,6 +145,11 @@
 			this._cache.delete(key);
 		}
 	}
+	Object.defineProperties(JSSQueryProcessor.SearchResult.prototype, {
+		matchedSize: {
+			get: function(){ return this._TfSet.size; }
+		}
+	})
 
 	JSSQueryProcessor.SearchResultSet = function(processor, query){
 		this._processor = processor;
@@ -255,7 +264,7 @@
 		LM: function(query, doca, docb){
 			// tf and document length
 			// need # of terms in the entire collection -> length of inverted index
-			// length of positing given term
+			// length of posting given term
 			if( !doca.hasSimilarityData("LMSimilarity") )
 				doca.cacheSimilarityData("LMSimilarity", _LM_DS_Score(query, doca) );
 			if( !docb.hasSimilarityData("LMSimilarity") )
@@ -404,25 +413,74 @@
 			config.sequence = config.sequence || JSSConst.GetConfig("query_settings", "proximity_sequence") || true;
 			config.proximity = true
 
-			// create new query instance anyway
+			// create new query instance to find single term
 			if( query instanceof JSSQueryProcessor.Query )
 				query = query.string.getRawText();
+			config.preprocess = true;
 			query = new JSSQueryProcessor.Query(query, this, config);
+			var rawResultSet = this._retrieveDocs(query);
 
-			var rawResultSet = this._retrieveDocs(query),
-				termResultSet = new JSSQueryProcessor.SearchResultSet(this, query),
-				termList = query.pos;
+			// --proximity search
+			// change to phrase query
+			config.preprocess = false
+			query = new JSSQueryProcessor.Query(query.string.getRawText(), this, config);
+			var phraseResultSet = new JSSQueryProcessor.SearchResultSet(this, query);
 
-			for( let rawResult of rawResultSet.getIterator() ){
-				var termResult = new JSSQueryProcessor.SearchResult( rawResult.DocId );
+			
+			for( let pair of rawResultSet.getIterator() ){
+
+				var rawResult = pair[1];
+				var phraseResult = new JSSQueryProcessor.SearchResult( rawResult.DocId );
+
+				// get positional list
+				for( let posting of rawResult._postingMatched ){
+					posting[1].positionalList = this.index.getPositionListByOffset( posting[1].PositionPointer );
+				}
+
 				for( let key of query.getKeyIterator() ){
+					var termList = DecodeTokenKey(key)[0].split(" "),
+						pivot = termList[ termList.length - 1 ];
+					if( rawResult._postingMatched.get(ToKey(pivot,"word")) === undefined )
+						continue;
+
 					// test every possible phrases
-					for( var i=config.phrase_size-1; i<termList.length; i++ ){
-						// phrase: i-config.phrase_size+1 ~ i
+					var posList = rawResult._postingMatched.get(ToKey(pivot,"word")).positionalList,
+						tfCounter = 0;
+					for( let pos of posList ){
+						var checkList = termList.slice(0,-1)
+						if( config.sequence == true ){
+							// with sequence
+							for( var j=pos-config.max_dis; j<pos; j++ ){
+								var pre = rawResult._postingMatched.get(ToKey(checkList[0],"word"));
+								if( pre != undefined && pre.positionalList.indexOf(j) > -1 ){
+									checkList.shift();
+								}
+							}
+							if( checkList.length == 0 ) // matched
+								tfCounter++;
+						}
+						else {
+							// omit sequence
+						}
 					}
+
+					if( tfCounter > 0 ){
+						phraseResult.addToken( tfCounter, key )
+						query.addTtfByKey( query.getTtf( key ) + tfCounter, key);
+						query.addDfByKey( query.getDf( key ) + 1, key );
+					}
+
+				}
+
+				if( phraseResult.matchedSize > 0 ){
+					phraseResultSet.addSearchResult( phraseResult );
 				}
 			}
 
+			// sort by similarity using sorting function and call similarity functions
+			phraseResultSet.rankBy( config.similarity || this.config.similarity );
+
+			return phraseResultSet;
 		},
 
 	}

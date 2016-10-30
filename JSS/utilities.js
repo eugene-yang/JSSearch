@@ -443,6 +443,7 @@
 					str = str.split( this.separator )[0];
 					return str;
 				}
+				offset += this.defaultReadChunck;
 			}
 		}
 	}
@@ -528,7 +529,7 @@
 			// }
 			// return ret;
 			for( var i=0; i<rawList.length; i++ ){ rawList[i] = parseInt(rawList[i]) }
-			log( string )
+			// log( string )
 			return rawList;
 		}
 	}

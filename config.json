@@ -7,7 +7,7 @@
 	"preserve_temp_files": false,
 	"index_output_directory": "./_indexes/",
 	"inverted_index_df_threshold": 2,
-	"inverted_index_type": "temp",
+	"inverted_index_type": "positional",
 
 	"preprocessing_settings":{
 		"parse_single_term": true,
@@ -31,7 +31,7 @@
 		"LM_Dirichlet_mu": 0.2,
 
 		"proximity_phrase_size": 2,
-		"proximity_max_dis": 2,
+		"proximity_max_dis": 1,
 		"proximity_sequence": true
 	}
 }
