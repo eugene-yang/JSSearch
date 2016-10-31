@@ -108,6 +108,8 @@
 
 	JSSQueryProcessor.SearchResult = function(DocId){
 		this._cache = new Map();
+		this._lastScore = null;
+
 		this._TfSet = new Map();
 		this._postingMatched = new Map();
 		this.DocId = DocId;
@@ -136,8 +138,10 @@
 		},
 
 		cacheSimilarityData: function(key, value){
-			if( value != undefined )
+			if( value != undefined ){
 				this._cache.set(key, value);
+				this._lastScore = value;
+			}
 			else{
 				return this._cache.get(key);
 			}
@@ -152,6 +156,9 @@
 	Object.defineProperties(JSSQueryProcessor.SearchResult.prototype, {
 		matchedSize: {
 			get: function(){ return this._TfSet.size; }
+		},
+		score: {
+			get: function(){ return this._lastScore; }
 		}
 	})
 
@@ -541,7 +548,7 @@
 			phraseResultSet.rankBy( config.similarity || this.config.similarity );
 
 			return phraseResultSet;
-		},
+		}
 
 	}
 
