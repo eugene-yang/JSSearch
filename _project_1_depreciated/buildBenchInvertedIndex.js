@@ -5,17 +5,23 @@
 // package include
 var fs = require('fs'),
 	cheerio = require('cheerio'),
-	JSSU = require('./JSS/utilities.js');
+	JSSU = require('../JSS/utilities.js');
 
 var log = function(obj){ console.log(typeof(obj) == "string" ? obj : JSON.stringify(obj, null, 2)) }
 
 module.exports = JSSU.createRunningContainer({
-	fileDir: "_data/BigSample/"
+	fileDir: "../_data/BigSample/",
+	settings: {
+		"inverted_index_type": "temp"
+	}
 },[
 	function startTotalTimer(){
 		log( "Memory Limit: " + JSSU.BufferPoolManager.maxMemoryEntry )
 
 		console.time("Total runtime")
+	},
+	function settings(){
+		this.config.preprocessing_settings = JSSU.Const.GetConfig("preprocessing_settings");
 	},
 	function getDocFileNames(){
 		// load file names in the data directory
@@ -23,6 +29,9 @@ module.exports = JSSU.createRunningContainer({
 	},
 	function loadDocuments(fnList){
 		console.time("Read time");
+
+		this.DocumentSet = new JSSU.DocumentSet(this.config);
+		this.addEventChild( this.DocumentSet );
 
 		var _Container = this;
 		for( let fn of fnList ){
@@ -38,7 +47,8 @@ module.exports = JSSU.createRunningContainer({
 			$('DOC').each(function(){
 				var Doc = new JSSU.Document({
 					id: $(this).find('DOCNO').text().replace(/\s/g, ""),
-					string: $(this).find('TEXT').text()
+					string: $(this).find('TEXT').text(),
+					config: { tokenType: _Container.config.preprocess }
 				})
 
 				_Container.DocumentSet.addDocument( Doc );

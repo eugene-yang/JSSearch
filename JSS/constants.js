@@ -17,6 +17,15 @@
 
 	// TODO: Add method for non-nodejs environment
 	JSSConst.Config = JSON.parse( require("fs").readFileSync("./config.json") );
+	JSSConst.setConfig = function(dir, val){
+		var dir = ( dir instanceof Array ) ? dir : [dir];
+		var target = dir.pop();
+		var path = JSSConst.Config;
+		for( let k of dir ){
+			path = path[ k ];
+		}
+		path[ target ] = val;
+	}
 	JSSConst.GetConfig = function(){
 		var argv = [...arguments];
 		var result = JSSConst.Config;

@@ -220,9 +220,7 @@
 			}
 			// check schema file
 			try {
-				var settings = JSON.parse( fs.readFileSync(fnd + ".schema", "utf8") );
-				this.schema = new JSSU.Schema( settings.schema );
-				this.cacheConfig = settings.config;
+				this.schema = new JSSU.Schema( JSON.parse( fs.readFileSync(fnd + ".schema", "utf8") ) );
 				this.type = "fixed"
 				this.inMemoryFirstIndex = fs.fstatSync(this.FD).size / this.schema.length;
 				this.writebufferList = new Array( this.inMemoryFirstIndex );
@@ -469,10 +467,7 @@
 	JSSU.Schema.prototype = {
 		toRealFile: function(fnd){
 			var FD = fs.openSync( fnd, 'w+' )
-			fs.writeSync( FD, JSON.stringify({
-				schema: this.schema,
-				config: JSSConst.GetConfig("preprocessing_settings")
-			}) )
+			fs.writeSync( FD, JSON.stringify( this.schema ) )
 			fs.close(FD)
 		},
 		hasField: function(field){
@@ -548,9 +543,10 @@
 	//---------------------- High Level Interface -----------------------
 
 
-	JSSU.DocumentSet = function(){
+	JSSU.DocumentSet = function(config){
 		JSSU.Eventable.call(this);
 
+		this.config = config || {}
 		this.set = {};
 		this._count = 0;
 	}
@@ -576,6 +572,7 @@
 				l.push( new JSSU.IndexedList(null, this.set[ id ]) );
 				this.meta.length[ id ] = this.set[id].tokenCount;
 			}
+			this.meta.preprocessing_settings = this.config.preprocessing_settings || JSSConst.GetConfig("preprocessing_settings");
 			// unlink all document instance so that the garbage collection can collect 
 			// these along merging
 			this.set = {};
@@ -608,7 +605,7 @@
 
 		this.Id = Id;
 		this.config = config || {};
-		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("default_index_with_position");
+		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("preprocessing_settings","default_index_with_position");
 
 		this.ext = "posting";
 
@@ -911,9 +908,9 @@
 
 		// public
 		this.config = config || {};
-		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("default_index_with_position");
+		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("preprocessing_settings","default_index_with_position");
 
-		this.String = new JSSU.String( string );
+		this.String = new JSSU.String( string, config );
 		this.tokenCount = 0;
 		this.bufferManager = new JSSU.BufferManager(id, 
 			!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
@@ -971,7 +968,7 @@
 	JSSU.String.prototype = {
 		tokenize: function(){
 			if( typeof this._cache.token === 'undefined' )
-				this._cache.token = JSSU.tokenize(this.text, null,this.config.tokenType)
+				this._cache.token = JSSU.tokenize(this.text, null, this.config.tokenType)
 			return this._cache.token;
 		},
 		getFlatIterator: function*(obj, type){
@@ -1304,12 +1301,17 @@
 		JSSU.Eventable.call(this);
 
 		this.config = config || {};
-		this.DocumentSet = new JSSU.DocumentSet();
-
-		this.addEventChild( this.DocumentSet );
 
 		this.callList = callList || [];
-		this.__terminated__ = false
+		this.__terminated__ = false;
+
+		// replace settings
+		if( this.config.settings != undefined ){
+			for( let key of this.config.settings.getIterator() ){
+				var p = key.split("/");
+				JSSConst.setConfig( p, this.config.settings[key] );
+			}
+		}
 	}
 	JSSU.RunningContainer.prototype = {
 		__init: function(){

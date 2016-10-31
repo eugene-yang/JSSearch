@@ -404,7 +404,7 @@
 		this.config = config || {};
 		this.config.similarity = this.config.similarity || JSSConst.GetConfig("query_settings","similarity_measure");
 		this.config.query = {
-			tokenType : this.index.configFromFile
+			tokenType : this.index.meta.preprocessing_settings
 		}
 		this.documentCount = Object.keys(this.index.meta.length).length;
 	}
