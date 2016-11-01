@@ -7,6 +7,7 @@ var log = function(obj){ console.log(typeof(obj) == "string" ? obj : JSON.string
 
 var indexSettings = {
 	"single": {
+		"inverted_index_df_threshold": 0,
 		"parse_single_term": true,
 		"exclude_stop_words": true,
 		"apply_stemmer": false,
@@ -16,6 +17,7 @@ var indexSettings = {
 		"default_index_with_position": false
 	},
 	"stem": {
+		"inverted_index_df_threshold": 0,
 		"parse_single_term": true,
 		"exclude_stop_words": false,
 		"apply_stemmer": true,
@@ -25,6 +27,7 @@ var indexSettings = {
 		"default_index_with_position": false
 	},
 	"phrase": {
+		"inverted_index_df_threshold": 2,
 		"parse_single_term": false,
 		"exclude_stop_words": false,
 		"apply_stemmer": false,
@@ -34,6 +37,7 @@ var indexSettings = {
 		"default_index_with_position": false
 	},
 	"positional": {
+		"inverted_index_df_threshold": 0,
 		"parse_single_term": true,
 		"exclude_stop_words": false,
 		"apply_stemmer": false,

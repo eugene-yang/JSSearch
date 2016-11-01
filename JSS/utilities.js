@@ -786,7 +786,7 @@
 			var postingHead = 0,
 				currentType = null,
 				currentTerm = null,
-				dfThreshold = threshold || JSSConst.GetConfig("inverted_index_df_threshold") || 0; // minimum df
+				dfThreshold = threshold || JSSConst.GetConfig("preprocessing_settings", "inverted_index_df_threshold") || 0; // minimum df
 
 			this.fire("buildInvertedIndexStarted")
 			for( let item of this.combinedIndex.getIterator() ){

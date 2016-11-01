@@ -61,7 +61,7 @@ for( let query of queries ){
 	
 
 	var results = outcome.top(100);
-	log( results.length  )
+	// log( results.length  )
 	for( var i=0; i<results.length; i++ ){
 		fs.writeSync( outputFS, query.num + " 0 " + results[i].DocId + " " + i + " " + results[i].score.toFixed(5) + " JSS_dynamic_" + model + "\n" );
 	}

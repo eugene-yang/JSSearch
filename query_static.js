@@ -10,7 +10,7 @@ var indexDir = process.argv[2],
 	model = process.argv[4],
 	indexType = process.argv[5],
 	outputFile = process.argv[6];
-
+	
 if( process.argv.length < 7 ){
 	log("Usage: query_static [index-directory-path] [query-file-path] [retrieval-model] [index-type] [results-file]")
 	process.exit(1);
