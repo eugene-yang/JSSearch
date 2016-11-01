@@ -50,9 +50,11 @@ var docDir = process.argv[2],
 
 if( !docDir || !indexType || !outputDir ){
 	log("Usage: build [trec-files-directory-path] [index-type] [output-dir]");
+	process.exit(1);
 }
 if( Object.keys(indexSettings).indexOf( indexType ) == -1 ){
 	log("index-type: single, stem, phrase, positional")
+	process.exit(1);
 }
 
 if (!fs.existsSync(outputDir)){

@@ -31,7 +31,7 @@
 		"LM_Dirichlet_mu": 0.2,
 
 		"proximity_phrase_size": 2,
-		"proximity_max_dis": 1,
-		"proximity_sequence": false
+		"proximity_max_dis": 10,
+		"proximity_sequence": true
 	}
 }

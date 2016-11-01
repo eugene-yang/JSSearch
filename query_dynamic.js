@@ -5,14 +5,13 @@ var fs = require("fs");
 var tempDir = "./_tmp/"
 
 // will be from cmd arguments
-var indexDir = process.argv[2],
+var indexDir = process.argv[2] ,
 	queryFile = process.argv[3],
-	model = process.argv[4],
-	indexType = process.argv[5],
-	outputFile = process.argv[6];
+	outputFile = process.argv[4],
+	model = process.argv[5] || "Cosine";
 
-if( process.argv.length < 7 ){
-	log("Usage: query_static [index-directory-path] [query-file-path] [retrieval-model] [index-type] [results-file]")
+if( process.argv.length < 5 ){
+	log("Usage: query_static [index-directory-path] [query-file-path] [results-file] [optional: retrieval-model]")
 	process.exit(1);
 }
 
@@ -20,7 +19,7 @@ model = model.toUpperCase()
 if( model == "COSINE" )
 	model = "Cosine";
 
-log("Searching in " + indexType + " index with " + model );
+log("Dynamic searching with " + model );
 
 console.time("Search Time")
 
@@ -31,8 +30,6 @@ if( outputDir != '' && !fs.existsSync( outputDir ) ){
 
 log("Output to " + outputFile + "\n");
 var outputFS = fs.openSync(outputFile, "w");
-
-var engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/" + indexType );
 
 // parse queries
 var topics = [],
@@ -48,16 +45,25 @@ for( var i=0; i<topics.length; i++ ){
 	queries.push({ topic: topics[i], num: qnum[i] });
 }
 
+var phrase_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/phrase" ),
+	proximity_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/positional" ),
+	general_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/stem" );
+
 // search
 for( let query of queries ){
-	if( indexType == "positional" )
-		var outcome = engine.proximitySearch( query.topic, { similarity: model } );
-	else{
-		var outcome = engine.search( query.topic, { similarity: model } );
-	}
+	var outcome = phrase_engine.search( query.topic, { similarity: model } );
+	if( outcome.size < 100 )
+		outcome = JSSQueryProcessor.SearchResultSet.merge( outcome, 
+					proximity_engine.proximitySearch( query.topic, { similarity: model } ) );
+	if( outcome.size < 100 )
+		outcome = JSSQueryProcessor.SearchResultSet.merge( outcome, 
+					general_engine.search( query.topic, { similarity: model } ) );
+	
+
 	var results = outcome.top(100);
+	log( results.length  )
 	for( var i=0; i<results.length; i++ ){
-		fs.writeSync( outputFS, query.num + " 0 " + results[i].DocId + " " + i + " " + results[i].score.toFixed(5) + " JSS_" + indexType + "_" + model + "\n" );
+		fs.writeSync( outputFS, query.num + " 0 " + results[i].DocId + " " + i + " " + results[i].score.toFixed(5) + " JSS_dynamic_" + model + "\n" );
 	}
 }
 
