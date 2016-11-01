@@ -216,6 +216,11 @@
 			var simMeasure = JSSQueryProcessor.Similarity[ simMeasure ].bind(this._processor.index, this._query); 
 
 			this._sorted = [...this._set.values()]
+
+			if( this._sorted.length == 1 ){
+				simMeasure(this._sorted[0], this._sorted[0]);
+			}
+
 			this._sorted.sort(function(a,b){
 				if( a.priority != b.priority )
 					return b.priority - a.priority;
@@ -237,12 +242,15 @@
 		},
 		
 	}
-	Object.defineProperties(JSSQueryProcessor.SearchResultSet, {
+	Object.defineProperties(JSSQueryProcessor.SearchResultSet.prototype, {
 		originalQuery: {
 			get: function(){ return this._query.string.getRawText(); }
 		},
 		ranked: {
 			get: function(){ return this._sorted != null; }
+		},
+		size: {
+			get: function(){ return this._set.size; }
 		}
 	})
 	JSSQueryProcessor.SearchResultSet.merge = function(seta, setb, similarity){
@@ -258,12 +266,13 @@
 		if( setb.ranked == false || setb.similarity != similarity )
 			setb.rankBy( similarity );
 
-		var merged = new JSSQueryProcessor.SearchResultSet("mix", seta.query);
+		var merged = new JSSQueryProcessor.SearchResultSet("mix", seta._query);
 		for( let result of seta.getIterator() ){
 			merged.addSearchResult( result );
 		}
 		for( let result of setb.getIterator() ){
-			merged.addSearchResult( result );
+			if( merged.findDoc( result.DocId ) == undefined || merged.findDoc( result.DocId ).score < result.score )
+				merged.addSearchResult( result );
 		}
 		merged.rankBy( similarity );
 		return merged;
