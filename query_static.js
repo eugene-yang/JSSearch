@@ -22,7 +22,7 @@ if( model == "COSINE" )
 
 log("Searching in " + indexType + " index with " + model );
 
-console.time("Search Time")
+
 
 var outputDir = outputFile.split("/").slice(0,-1).join("/")
 if( outputDir != '' && !fs.existsSync( outputDir ) ){
@@ -33,6 +33,8 @@ log("Output to " + outputFile + "\n");
 var outputFS = fs.openSync(outputFile, "w");
 
 var engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/" + indexType );
+
+console.time("Search Time")
 
 // parse queries
 var topics = [],

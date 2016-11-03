@@ -21,7 +21,9 @@ if( model == "COSINE" )
 
 log("Dynamic searching with " + model );
 
-console.time("Search Time")
+var phrase_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/phrase" ),
+	proximity_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/positional" ),
+	general_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/single" );
 
 var outputDir = outputFile.split("/").slice(0,-1).join("/")
 if( outputDir != '' && !fs.existsSync( outputDir ) ){
@@ -30,6 +32,8 @@ if( outputDir != '' && !fs.existsSync( outputDir ) ){
 
 log("Output to " + outputFile + "\n");
 var outputFS = fs.openSync(outputFile, "w");
+
+console.time("Search Time")
 
 // parse queries
 var topics = [],
@@ -44,10 +48,6 @@ var queries = [];
 for( var i=0; i<topics.length; i++ ){
 	queries.push({ topic: topics[i], num: qnum[i] });
 }
-
-var phrase_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/phrase" ),
-	proximity_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/positional" ),
-	general_engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/stem" );
 
 // search
 for( let query of queries ){
