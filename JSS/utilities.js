@@ -216,7 +216,7 @@
 			try {
 				this.FD = fs.openSync(fnd, "r")
 			} catch(e){
-				throw new Error("Index file does not exist", fnd)
+				throw new Error("Index file does not exist: " + fnd)
 			}
 			// check schema file
 			try {
@@ -562,6 +562,13 @@
 
 			this.fire("documentAdded", doc);
 		},
+		toDocumentIndex: function(){
+			var fullList = new JSSU.DocumentIndexHashTable("DocHTList")
+			for( let id of this.getIterator() ){
+				fullList.add(id, this.set[ id ])
+			}
+			return fullList;
+		},
 		toInvertedIndex: function(threshold){
 			// drop document temp files along merging
 			// output an JSSU.IndexedList object with entries all flushed
@@ -582,7 +589,7 @@
 			this.fire("mergingDone");
 
 			
-			var indexHT = new JSSU.IndexHashTable( combinedIndex, this.meta );
+			var indexHT = new JSSU.InvertedIndexHashTable( combinedIndex, this.meta );
 			indexHT.calculate(threshold);
 			
 			return indexHT;
@@ -607,7 +614,7 @@
 		this.config = config || {};
 		this.config.tokenPosition = this.config.tokenPosition || JSSConst.GetConfig("preprocessing_settings","default_index_with_position");
 
-		this.ext = "posting";
+		this.ext = this.config.ext || "posting";
 
 		if( target instanceof JSSU.Document ){
 			this.Id = this.Id || target.Id;
@@ -698,12 +705,16 @@
 		destroy: function(){
 			this.bufferManager.destroy();
 		},
+		setMeta: function(data){
+			this.meta = data;
+		},
 		getIterator: function*(){
 			yield* this.bufferManager.getIteratorFromHead();
 		},
 		push: function(obj){
-			this.bufferManager.push(obj);
+			var i = this.bufferManager.push(obj);
 			this.fire("itemAdded", obj);
+			return i;
 		},
 		getIteratorByIndex: function*(ind, withSameWord, validation){
 			if( !withSameWord )
@@ -747,16 +758,68 @@
 		}
 	})
 
-	JSSU.LoadIndexHashTable = function(prefixName, dir){
+	JSSU.LoadDocumentIndexHashTable = function(prefixName, dir){
 		var dir = dir || ".";
-		return new JSSU.IndexHashTable({
+		return new JSSU.DocumentIndexHashTable({
+			mainFnd: dir + "/" + prefixName + ".orgindex"
+		})
+	}
+	JSSU.DocumentIndexHashTable = function(Id, config){
+		JSSU.Eventable.call(this);
+
+		this.Id = Id;
+		this.config = config || {};
+		this.ext = "orgindex"
+
+		if( typeof(Id) === "object" ){
+			config = Id;
+			log( config );
+			this.bufferManager = new JSSU.BufferManager({ fnd: config.mainFnd, load:true, parent: this })
+		}
+		else {
+			this.meta = this.meta || {};
+			this.bufferManager = new JSSU.BufferManager( Id, 
+				!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
+		}
+	}
+	JSSU.DocumentIndexHashTable.prototype = {
+		add: function(docid, doc){
+			var headi = null;
+			for( let token of doc.getIterator() ){
+				var i = this.push(token);
+				if( headi == null ) headi = i;
+			}
+			this.meta[ docid ] = headi * this.schemaLength;
+		},
+		getTermListIteratorByDocId: function*(docid){
+			offset = this.meta[ docid ]
+			for( let item of this.bufferManager.getIteratorFromOffset( offset ) ){
+				if( item.DocumentId != docid )
+					break;
+				yield item;
+			}
+		},
+		getTermListByDocId: function(docid){
+			return [...this.getTermListIteratorByDocId(docid)];
+		},
+	}
+	JSSU.DocumentIndexHashTable.extend( JSSU.IndexedList );
+	JSSU.DocumentIndexHashTable.extend( JSSU.Eventable );
+	Object.defineProperties(JSSU.DocumentIndexHashTable.prototype, {
+		schemaLength: {
+			get: function(){ return this.bufferManager.schema.length; }
+		}
+	})
+
+	JSSU.LoadInvertedIndexHashTable = function(prefixName, dir){
+		var dir = dir || ".";
+		return new JSSU.InvertedIndexHashTable({
 			mainFnd: dir + "/" + prefixName + ".index",
 			postingFnd: dir + "/" + prefixName + ".posting",
 			positionFnd: dir + "/" + prefixName + ".position"
 		})
 	}
-
-	JSSU.IndexHashTable = function(combinedIndex, metaData){
+	JSSU.InvertedIndexHashTable = function(combinedIndex, metaData){
 		JSSU.Eventable.call(this);
 
 		if( !( combinedIndex instanceof JSSU.IndexedList ) ){
@@ -780,7 +843,7 @@
 		this.hashedEntryCounter = 0;
 		this.positionListBufferManager = this.positionListBufferManager || JSSU.PositionListBufferManager;
 	}
-	JSSU.IndexHashTable.prototype = {
+	JSSU.InvertedIndexHashTable.prototype = {
 		calculate: function(threshold){
 			var counter = 0;
 			var postingHead = 0,
@@ -884,9 +947,9 @@
 			return this.bufferManager.get(ind);
 		}
 	}
-	JSSU.IndexHashTable.extend( JSSU.IndexedList );
-	JSSU.IndexHashTable.extend( JSSU.Eventable );
-	Object.defineProperties(JSSU.IndexHashTable.prototype, {
+	JSSU.InvertedIndexHashTable.extend( JSSU.IndexedList );
+	JSSU.InvertedIndexHashTable.extend( JSSU.Eventable );
+	Object.defineProperties(JSSU.InvertedIndexHashTable.prototype, {
 		configFromFile: {
 			get: function(){
 				return this.bufferManager.cacheConfig;
@@ -914,7 +977,6 @@
 		this.tokenCount = 0;
 		this.bufferManager = new JSSU.BufferManager(id, 
 			!!this.config.tokenPosition ? JSSConst.IndexSchema.Position : JSSConst.IndexSchema.NoPosition );
-
 	}
 	JSSU.Document.prototype = {
 		createIndex: function(){
@@ -947,6 +1009,9 @@
 			}
 			//log( this.bufferManager.writebufferList )
 		},
+		getIterator: function*(){
+			yield* this.bufferManager.getIteratorFromHead();
+		},
 		flushAll: function(){
 			this.bufferManager.flushAll();
 		}
@@ -958,14 +1023,26 @@
 
 
 	JSSU.String = function(txt, config){
-		// read-only
-		this.getRawText = () => txt;
+		// clone constructor
+		if( txt instanceof JSSU.String && arguments.length == 1 ){
+			var rawText = txt.getRawText()
+			this.getRawText = () => rawText;
+			this.config = txt.config.clone();
+			this._cache = txt._cache.clone();
+		}
+		else {
+			// read-only
+			this.getRawText = () => txt;
 
-		// public
-		this.config = config || {};
-		this._cache = {};
+			// public
+			this.config = config || {};
+			this._cache = {};
+		}
 	}
 	JSSU.String.prototype = {
+		clone: function(){
+			return new JSSU.String(this);
+		},
 		tokenize: function(){
 			if( typeof this._cache.token === 'undefined' )
 				this._cache.token = JSSU.tokenize(this.text, null, this.config.tokenType)

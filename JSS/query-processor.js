@@ -408,13 +408,19 @@
 		return sum;
 	}
 
-	JSSQueryProcessor.LoadIndexHashTable = JSSU.LoadIndexHashTable;
+	JSSQueryProcessor.LoadInvertedIndexHashTable = JSSU.LoadInvertedIndexHashTable;
+	JSSQueryProcessor.LoadDocumentIndexHashTable = JSSU.LoadDocumentIndexHashTable;
 	JSSQueryProcessor.QueryProcessor = function(index, config){
-		if( !(index instanceof JSSU.IndexHashTable) ){
-			var index = JSSU.LoadIndexHashTable.apply({}, index instanceof Array ? index : [index]);
+		if( !(index instanceof JSSU.InvertedIndexHashTable) ){
+			try{
+				var docIndex = JSSU.LoadDocumentIndexHashTable.apply({}, index instanceof Array ? index : [index]);
+			}
+			catch(e){}
+			var index = JSSU.LoadInvertedIndexHashTable.apply({}, index instanceof Array ? index : [index]);
 		}
 
 		this.index = index;
+		this.docIndex = docIndex || {};
 		this.index.load();
 
 		this.config = config || {};
