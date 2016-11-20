@@ -25,11 +25,11 @@
 		"similarity_measure": "BM25",
 
 		"BM25_parameters": {
-			"k1": 0.5,
+			"k1": 0.05,
 			"k2": 200,
-			"b": 0.15
+			"b": 0.09 	
 		},
-		"LM_Dirichlet_mu": 700,
+		"LM_Dirichlet_mu": 6000,
 
 		"proximity_phrase_size": 2,
 		"proximity_max_dis": 10,
