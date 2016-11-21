@@ -773,7 +773,6 @@
 
 		if( typeof(Id) === "object" ){
 			config = Id;
-			log( config );
 			this.bufferManager = new JSSU.BufferManager({ fnd: config.mainFnd, load:true, parent: this })
 		}
 		else {

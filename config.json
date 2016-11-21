@@ -33,6 +33,16 @@
 
 		"proximity_phrase_size": 2,
 		"proximity_max_dis": 10,
-		"proximity_sequence": true
+		"proximity_sequence": true,
+
+		"expansion": {
+			"topDoc": 20,
+			"topToken": 20,
+			"alpha": 0.7,
+			"beta": 0.3
+		},
+		"reduction": {
+
+		}
 	}
 }

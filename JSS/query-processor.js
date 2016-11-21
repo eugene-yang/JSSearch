@@ -18,43 +18,58 @@
 	// for debug
 	var log = obj => console.log(JSON.stringify(obj, null, 2))
 	
+	// utility functions
 	var ToKey = function(v){ return (v instanceof Array?v:[...arguments]).join( JSSConst.TokenTypeSeparator ) };
 	var DecodeTokenKey = key => ( key.split( JSSConst.TokenTypeSeparator ) )
+	var caliDf = (docC, df) => ( Math.log( docC - df + 0.5 ) - Math.log( df + 0.5 ) )
 
 	JSSQueryProcessor.Query = function(string, processor, config){
-		this._processor = processor;
-		this.config = config || {};
-
 		this.df = {};
 		this.idf = {};
 		this.tf = {};
 		this.ttf = {};
 
-		this._cache = new Map();
-
-		if( config.proximity === true && config.preprocess == true ){
-			var tokenType = JSSConst.GetConfig("preprocessing_settings")
-			for( let se of Object.keys(tokenType) ){ tokenType[ se ] = false; }
-			tokenType["parse_single_term"] = true
-			this.string = new JSSU.String( string, { tokenType: tokenType } );
-		}
-		else if( config.proximity === true && config.preprocess == false ){
-			var tokenType = JSSConst.GetConfig("preprocessing_settings")
-			for( let se of Object.keys(tokenType) ){ tokenType[ se ] = false; }
-			tokenType["parse_phrase"] = true
-			tokenType["phrase_accept_length"] = [ config.phrase_size ]
-			this.string = new JSSU.String( string, { tokenType: tokenType } );
+		// clone construction
+		if( string instanceof JSSQueryProcessor.Query && arguments.length == 1 ){
+			this._processor = string._processor;
+			this.config = string.config.clone();
+			this.string = string.string.clone();
+			this.tf = string.tf.clone();
 		}
 		else {
-			this.string = new JSSU.String( string, this.config );
+			this._processor = processor;
+			this.config = config || {};
+
+			if( config.proximity === true && config.preprocess == true ){
+				var tokenType = JSSConst.GetConfig("preprocessing_settings")
+				for( let se of Object.keys(tokenType) ){ tokenType[ se ] = false; }
+				tokenType["parse_single_term"] = true
+				this.string = new JSSU.String( string, { tokenType: tokenType } );
+			}
+			else if( config.proximity === true && config.preprocess == false ){
+				var tokenType = JSSConst.GetConfig("preprocessing_settings")
+				for( let se of Object.keys(tokenType) ){ tokenType[ se ] = false; }
+				tokenType["parse_phrase"] = true
+				tokenType["phrase_accept_length"] = [ config.phrase_size ]
+				this.string = new JSSU.String( string, { tokenType: tokenType } );
+			}
+			else {
+				this.string = new JSSU.String( string, this.config );
+			}
+
+			// create term frequency list
+			for( let token of this.getTokenIterator() ){
+				this.tf[ ToKey(token.term, token.type) ] = token.post.length;
+			}
 		}
 
-		// create term frequency list
-		for( let token of this.getTokenIterator() ){
-			this.tf[ ToKey(token.term, token.type) ] = token.post.length;
-		}
+		this._cache = new Map();
 	}
 	JSSQueryProcessor.Query.prototype = {
+		clone: function(){
+			return new JSSQueryProcessor.Query(this);
+		},
+
 		getTokenIterator: function*(){
 			yield* this.string.getFlatIterator();
 		},
@@ -66,7 +81,9 @@
 			df = parseInt(df);
 			this.df[ key ] = df;
 			// smoothed id
-			this.idf[ key ] = Math.log( this._processor.documentCount - df + 0.5 ) - Math.log( df + 0.5 ) 
+			this.idf[ key ] = caliDf(this._processor.documentCount, df)
+
+			// Math.log( this._processor.documentCount - df + 0.5 ) - Math.log( df + 0.5 ) 
 		},
 		addTtfByKey: function(ttf){
 			var key = ToKey([...arguments].slice(1))
@@ -75,8 +92,7 @@
 		getTf: function(){ return this.tf[ ToKey([...arguments]) ] || 0.5; },
 		getDf: function(){ return this.df[ ToKey([...arguments]) ] || 0.5 },
 		getiDf: function(){ 
-			return this.idf[ ToKey([...arguments]) ] || 
-					Math.log( this._processor.documentCount + 0.5 ) - Math.log( 0.5 ) ; 
+			return this.idf[ ToKey([...arguments]) ] || caliDf( this._processor.documentCount, 0 );
 		},
 		getTtf: function(){ 
 			return this.ttf[ ToKey([...arguments]) ] || 0.5;
@@ -459,11 +475,70 @@
 			}
 			return resultByDocs;
 		},
+		queryExpansion: function(query, config){
+			// return a new JSSQueryProcessor.Query instance
+			config = config.clone()
+			expConfig = config.expansion;
+			// set defaults
+			if( typeof(expConfig) !== "object" )
+				expConfig = {};
+			expConfig.topDoc = parseInt( expConfig.topDoc ) || JSSConst.GetConfig("query_settings", "expansion", "topDoc");
+			expConfig.topToken = parseInt( expConfig.topToken ) || JSSConst.GetConfig("query_settings", "expansion", "topToken");
+			expConfig.alpha = parseFloat( expConfig.alpha ) || JSSConst.GetConfig("query_settings", "expansion", "alpha");
+			expConfig.beta = parseFloat( expConfig.beta ) || JSSConst.GetConfig("query_settings", "expansion", "beta");
+
+			delete config.expansion;
+			delete config.reduction;
+
+			var topResults = this.search( query, config ).top( expConfig.topDoc )
+			var topTokens = new Map();
+			var topTokensIdf = new Map();
+			for( let result of topResults ){
+				for( let item of this.docIndex.getTermListIteratorByDocId( result.DocId ) ){
+					var key = ToKey( item.Term, item.Type )
+					if( topTokens.has( key ) )
+						topTokens.set(key, topTokens.get(key) + 1)
+					else {
+						topTokens.set(key, 1);
+						var ivItem = this.index.findTerm( item.Term, false, item.Type );
+						topTokensIdf.set( key, caliDf(this.documentCount, ivItem.DocFreq) )
+					}
+				}
+			}
+			topTokens = new Map( [...topTokens].sort(function(a,b){
+					return a[1]*topTokensIdf.get(a[0])<b[1]*topTokensIdf.get(b[0])
+				}).slice(0, expConfig.topToken) )
+
+			// implement Rocchio Vector Space relevance feedback with binary features
+			var expandedQuery = query.clone();
+			for( let orgToken of expandedQuery.tf.getIterator() ){
+				expandedQuery.tf[ orgToken ] *= expConfig.alpha;
+			}
+			for( let newToken of topTokens.keys() ){
+				if( !( newToken in expandedQuery.tf ) )
+					expandedQuery.tf[ newToken ] = 0
+				expandedQuery.tf[ newToken ] += 1 * expConfig.beta;
+			}
+
+			// default
+			return expandedQuery;
+		},
+		queryReduction: function(query, config){
+			// return a new JSSQueryProcessor.Query instance
+
+			// default
+			return query
+		},
 		search: function(query, config){
 			var config = config || {};
 			
 			if( !(query instanceof JSSQueryProcessor.Query) )
 				query = new JSSQueryProcessor.Query(query, this, this.config.query);
+
+			if( config.expansion !== undefined && config.expansion != false )
+				query = this.queryExpansion(query, config)
+			if( config.reduction !== undefined && config.reduction != false )
+				query = this.queryReduction(query, config)
 			
 			// get document set
 			var resultSet = this._retrieveDocs(query);

@@ -108,6 +108,9 @@
 		this.prototype = proto;
 		this.prototype.constructor = this;
 	}
+	Object.prototype.clone = function(){
+		return JSON.parse( JSON.stringify(this) )
+	}
 	String.prototype.fixLength = function(len){
 		var blank = ""
 		for( var i=0; i<len;i++ ){ blank += " " }

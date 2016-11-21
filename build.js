@@ -116,17 +116,24 @@ JSSU.createRunningContainer({
 
 		console.timeEnd("Read time");
 	},
+	function buildDocumentIndex(){
+		console.time("Sequential Write Doc time")
+		this.DocumentIndex = this.DocumentSet.toDocumentIndex()
+		this.addEventChild( this.DocumentIndex );
+		console.timeEnd("Sequential Write Doc time")
+	},
 	function buildInvertedIndex(){
 		console.time("Merging time");
 
 		log( "Start building index" )
-		this.IndexHashTable = this.DocumentSet.toInvertedIndex()
-		this.addEventChild( this.IndexHashTable );
+		this.InvertedIndex = this.DocumentSet.toInvertedIndex()
+		this.addEventChild( this.InvertedIndex );
 		console.timeEnd("Merging time");
 	},
 	function FlushToDisk(){
 		console.time("Flush time")
-		this.IndexHashTable.finalize();
+		this.InvertedIndex.finalize();
+		this.DocumentIndex.finalize();
 		console.timeEnd("Flush time")
 	},
 	function stopTotalTimer(){

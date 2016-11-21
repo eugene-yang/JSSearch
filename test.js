@@ -8,23 +8,11 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 // output = require("./buildBenchInvertedIndex")
 // output.run()
 
-var engine = new JSSQueryProcessor.QueryProcessor( "./_indexes/positional" );
+var engine = new JSSQueryProcessor.QueryProcessor( "./_indexes/single" );
 
-// var result = engine.search("financial institutions in federal government over $100000", {similarity: "LM"} ) 
+var outcome = engine.search("Control of Food Supplements", {expansion: true})
 
-// var flat = [];
-// for( let re of result.getIterator() ){
-// 	flat.push({
-// 		DocId: re.DocId,
-// 		similarity: [...re._cache]
-// 	})
-// }
-// log( flat );
+log( outcome._query.tf )
 
-// engine.search("find my iPhone quick")
-
-// engine.search("Potential applicants should have already contacted their State Single Point of Contact ")
-
-engine.proximitySearch("programs federal",{sequence:false})
 
 debugger
