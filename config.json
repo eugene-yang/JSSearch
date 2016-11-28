@@ -42,7 +42,7 @@
 			"beta": 0.3
 		},
 		"reduction": {
-
+			"percentage": 0.8
 		}
 	}
 }

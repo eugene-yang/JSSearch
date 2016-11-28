@@ -71,7 +71,17 @@
 		},
 
 		getTokenIterator: function*(){
-			yield* this.string.getFlatIterator();
+			if( Object.keys(this.tf).length  == 0 )
+				yield* this.string.getFlatIterator();
+			else {
+				for( let token of this.getKeyIterator() ){
+					token = DecodeTokenKey(token)
+					yield {
+						term: token[0],
+						type: token[1]
+					}
+				}
+			}
 		},
 		getKeyIterator: function*(){
 			yield* this.tf.getIterator();
@@ -525,9 +535,29 @@
 		},
 		queryReduction: function(query, config){
 			// return a new JSSQueryProcessor.Query instance
+			
+			var perc = parseFloat(config.reduction) || JSSConst.GetConfig("query_settings", "reduction", "percentage")
+
+			this._retrieveDocs(query) // get idf in the query instance
+			var list = []
+			for( let token of query.getKeyIterator() ){
+				list.push({
+					token: token,
+					tf: query.tf[token],
+					idf: query.idf[token]
+				})
+			}
+			list.sort(function(a,b){ return b.idf - a.idf; })
+			list = list.slice(0, list.length * perc)
+
+			var reducedQuery = query.clone();
+			reducedQuery.tf = {}
+			for( let token of list ){
+				reducedQuery.tf[ token.token ] = token.tf
+			}
 
 			// default
-			return query
+			return reducedQuery
 		},
 		search: function(query, config){
 			var config = config || {};
