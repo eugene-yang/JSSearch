@@ -535,6 +535,7 @@
 		},
 		queryReduction: function(query, config){
 			// return a new JSSQueryProcessor.Query instance
+			// if percentage is >1, then switch to # of terms 
 			
 			var perc = parseFloat(config.reduction) || JSSConst.GetConfig("query_settings", "reduction", "percentage")
 
@@ -547,8 +548,8 @@
 					idf: query.idf[token]
 				})
 			}
-			list.sort(function(a,b){ return b.idf - a.idf; })
-			list = list.slice(0, list.length * perc)
+			list.sort(function(a,b){ return b.tf*b.idf - a.tf*a.idf; })
+			list = list.slice(0, perc > 1 ? perc : list.length * perc)
 
 			var reducedQuery = query.clone();
 			reducedQuery.tf = {}
