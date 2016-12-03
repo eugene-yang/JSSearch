@@ -10,7 +10,7 @@ var tempDir = "./_tmp/"
 // will be from cmd arguments
 var indexDir = "./_indexes/",
 	queryFile = "./_data/QueryFile/queryfile.txt",
-	indexType = "single";
+	indexType = process.argv[2];
 
 
 // parse queries
@@ -107,7 +107,7 @@ var parameters = {
 }
 
 
-for( let mod of ["BM25", "Cosine", "LM"] ){
+for( let mod of ["Cosine", "LM", "BM25"] ){
 	log("run " + mod)
 
 	var f = run.bind(null, mod);
@@ -116,14 +116,14 @@ for( let mod of ["BM25", "Cosine", "LM"] ){
 
 	// write file
 	var keys = Object.keys(opt.record[0].params)
-	var fp = fs.openSync( tempDir + "reduction_" + mod + ".csv");
-	fp.writeSync( "MAP," + keys.join(",") + "\n" )
+	var fp = fs.openSync( tempDir + "expansion_" + mod + "_" + indexType + ".csv", "w");
+	fs.writeSync(fp, "Model,MAP," + keys.join(",") + "\n" )
 	for( let entry of opt.record ){
-		fp.writeSync( entry.val + "," )
+		fs.writeSync(fp, mod + "," + entry.val + "," )
 		for( let key of keys ){
-			fp.writeSync( entry.params[key] + "," )
+			fs.writeSync(fp, entry.params[key] + "," )
 		}
-		fp.writeSync("\n");
+		fs.writeSync(fp, "\n");
 	}
 	fs.closeSync( fp )
 }

@@ -1,4 +1,5 @@
 var JSSQueryProcessor = require('./JSS/query-processor.js')
+var JSSU = require('./JSS/utilities.js')
 var optimizer = require('./JSS/optimizer.js')
 const execSync = require('child_process').execSync;
 
@@ -10,7 +11,7 @@ var tempDir = "./_tmp/"
 // will be from cmd arguments
 var indexDir = "./_indexes/",
 	queryFile = "./_data/QueryFile/queryfile.txt",
-	indexType = "single";
+	indexType = process.argv[2];
 
 
 // parse queries
@@ -32,6 +33,16 @@ for( var i=0; i<lines.length; i++ ){
 			else if( lines[i].match(/^<num>/ig) != null )
 				query.num = parseInt(lines[i].split(":")[1])
 		}
+		query.narr_stem = new JSSU.String(query.narr, {tokenType: {
+			"inverted_index_df_threshold": 0,
+			"parse_single_term": true,
+			"exclude_stop_words": false,
+			"apply_stemmer": true,
+			"parse_phrase": false,
+			"phrase_accept_length": [2,3,4],
+			"parse_special_term": false,
+			"default_index_with_position": false
+		}})
 		queries.push(query)
 	}
 }
@@ -67,7 +78,7 @@ function run(model, params){
 		config.LM_Dirichlet_mu = params.mu
 
 	for( let query of queries ){
-		var outcome = engine.search( query.narr, config);
+		var outcome = engine.search( indexType == "stem" ? query.narr_stem : query.narr, config);
 		var results = outcome.top(100);
 		for( var i=0; i<results.length; i++ ){
 			outputString += ( query.num + " 0 " + results[i].DocId + " " + i + " " + results[i].score.toFixed(5) + " JSS_" + indexType + "_" + model + "\n" );
@@ -103,10 +114,10 @@ for( let mod of ["Cosine", "BM25", "LM"] ){
 
 	// write file
 	var keys = Object.keys(opt.record[0].params)
-	var fp = fs.openSync( tempDir + "reduction_" + mod + ".csv", "w");
-	fs.writeSync(fp, "MAP," + keys.join(",") + "\n" )
+	var fp = fs.openSync( tempDir + "reduction_" + mod + "_" + indexType + ".csv", "w");
+	fs.writeSync(fp, "Model,MAP," + keys.join(",") + "\n" )
 	for( let entry of opt.record ){
-		fs.writeSync(fp, entry.val + "," )
+		fs.writeSync(fp, mod + "," + entry.val + "," )
 		for( let key of keys ){
 			fs.writeSync(fp, entry.params[key] + "," )
 		}

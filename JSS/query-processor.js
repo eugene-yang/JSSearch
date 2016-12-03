@@ -54,7 +54,11 @@
 				this.string = new JSSU.String( string, { tokenType: tokenType } );
 			}
 			else {
-				this.string = new JSSU.String( string, this.config.query );
+				if( !(string instanceof JSSU.String) )
+					this.string = new JSSU.String( string, this.config.query );
+				else {
+					this.string = string
+				}
 			}
 
 			// create term frequency list
@@ -510,7 +514,7 @@
 						topTokens.set(key, topTokens.get(key) + 1)
 					else {
 						topTokens.set(key, 1);
-						var ivItem = this.index.findTerm( item.Term, false, item.Type );
+						var ivItem = this.index.findTerm( item.Term, false, item.Type ) || {DocFreq: 1};
 						topTokensIdf.set( key, caliDf(this.documentCount, ivItem.DocFreq) )
 					}
 				}
