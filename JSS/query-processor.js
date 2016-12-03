@@ -54,7 +54,7 @@
 				this.string = new JSSU.String( string, { tokenType: tokenType } );
 			}
 			else {
-				this.string = new JSSU.String( string, this.config );
+				this.string = new JSSU.String( string, this.config.query );
 			}
 
 			// create term frequency list
@@ -407,7 +407,7 @@
 			avgdl = avgdl / Object.keys(index.meta.length).length;
 			query._processor.avgdl = avgdl;
 		}
-		var param = JSSConst.GetConfig("query_settings","BM25_parameters")
+		var param = query.config.BM25_parameters || JSSConst.GetConfig("query_settings","BM25_parameters")
 		var K = param.k1 * ( 1 - param.b + param.b*index.meta.length[doc.DocId]/avgdl )
 		var sum = 0;
 		for( let key of query.getKeyIterator() ){
@@ -425,7 +425,7 @@
 			query._processor.collection_size = collection_size;
 		}
 
-		var mu = JSSConst.GetConfig("query_settings","LM_Dirichlet_mu");
+		var mu = query.config.LM_Dirichlet_mu || JSSConst.GetConfig("query_settings","LM_Dirichlet_mu");
 		var sum = 0;
 		for( let key of query.getKeyIterator() ){
 			// log( doc.getTf(key) / index.meta.length[doc.DocId] )
@@ -495,7 +495,7 @@
 			expConfig.topDoc = parseInt( expConfig.topDoc ) || JSSConst.GetConfig("query_settings", "expansion", "topDoc");
 			expConfig.topToken = parseInt( expConfig.topToken ) || JSSConst.GetConfig("query_settings", "expansion", "topToken");
 			expConfig.alpha = parseFloat( expConfig.alpha ) || JSSConst.GetConfig("query_settings", "expansion", "alpha");
-			expConfig.beta = parseFloat( expConfig.beta ) || JSSConst.GetConfig("query_settings", "expansion", "beta");
+			expConfig.beta = parseFloat( expConfig.beta ) || (1 - expConfig.alpha)
 
 			delete config.expansion;
 			delete config.reduction;
@@ -537,7 +537,7 @@
 			// return a new JSSQueryProcessor.Query instance
 			// if percentage is >1, then switch to # of terms 
 			
-			var perc = parseFloat(config.reduction) || JSSConst.GetConfig("query_settings", "reduction", "percentage")
+			var perc = parseFloat(config.reduction) !== NaN ? parseFloat(config.reduction) : JSSConst.GetConfig("query_settings", "reduction", "percentage")
 
 			this._retrieveDocs(query) // get idf in the query instance
 			var list = []
@@ -549,7 +549,7 @@
 				})
 			}
 			list.sort(function(a,b){ return b.tf*b.idf - a.tf*a.idf; })
-			list = list.slice(0, perc > 1 ? perc : list.length * perc)
+			list = list.slice(0, perc > 1 ? perc : (list.length * perc) )
 
 			var reducedQuery = query.clone();
 			reducedQuery.tf = {}
@@ -564,11 +564,11 @@
 			var config = config || {};
 			
 			if( !(query instanceof JSSQueryProcessor.Query) )
-				query = new JSSQueryProcessor.Query(query, this, this.config.query);
+				query = new JSSQueryProcessor.Query(query, this, this.config);
 
-			if( config.expansion !== undefined && config.expansion != false )
+			if( config.expansion !== undefined && config.expansion !== false )
 				query = this.queryExpansion(query, config)
-			if( config.reduction !== undefined && config.reduction != false )
+			if( config.reduction !== undefined && config.reduction !== false )
 				query = this.queryReduction(query, config)
 			
 			// get document set

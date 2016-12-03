@@ -120,4 +120,15 @@
 		return this.indexOf( substring ) > -1;
 	}
 
+	Number.range = function*(start, stop, step){
+		if( typeof(step) == 'undefined' )
+			step = 1
+		if( typeof(stop) == 'undefined' )
+			stop = start, start = 0;
+		// digit modify
+		var factor = Math.pow(10, (step.toString() + "." ).split(".")[1].length)
+		for( var i=start; i<stop+step; i+=step )
+			yield Math.round(i*factor) / factor;
+	}
+
 }))

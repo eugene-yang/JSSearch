@@ -27,7 +27,7 @@
 		"BM25_parameters": {
 			"k1": 0.05,
 			"k2": 200,
-			"b": 0.09 	
+			"b": 0.09
 		},
 		"LM_Dirichlet_mu": 6000,
 
@@ -38,8 +38,7 @@
 		"expansion": {
 			"topDoc": 20,
 			"topToken": 20,
-			"alpha": 0.7,
-			"beta": 0.3
+			"alpha": 0.7
 		},
 		"reduction": {
 			"percentage": 0.8

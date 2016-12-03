@@ -1,4 +1,5 @@
 var JSSQueryProcessor = require('./JSS/query-processor.js')
+var optimizer = require('./JSS/optimizer.js')
 const execSync = require('child_process').execSync;
 
 var log = function(obj){ console.log(typeof(obj) == "string" ? obj : JSON.stringify(obj, null, 2)) }
@@ -9,8 +10,7 @@ var tempDir = "./_tmp/"
 // will be from cmd arguments
 var indexDir = "./_indexes/",
 	queryFile = "./_data/QueryFile/queryfile.txt",
-	model = "BM25",
-	indexType = "stem";
+	indexType = "single";
 
 
 // parse queries
@@ -36,6 +36,8 @@ for( var i=0; i<lines.length; i++ ){
 	}
 }
 
+var engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/" + indexType );
+
 var getMAP = function(resultString){
 	var fn = tempDir + parseInt( Math.random() * 10000 ) + "eval.tmp",
 		outputFS = fs.openSync(fn, "w");
@@ -56,19 +58,59 @@ var getMAP = function(resultString){
 }
 
 
+function run(model, params){
+	var outputString = "";
+	var config = { model: model, reduction: params.threshold }
+	if( model == "BM25" )
+		config.BM25_parameters = { k1: params.k1, k2: params.k2, b: params.b }
+	else if( model == "LM" )
+		config.LM_Dirichlet_mu = params.mu
 
-var engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/" + indexType );
-
-// search
-thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2, 3, 4, 5, 10]
-for( let fa of thresholds ){
-	var outputString = ""
 	for( let query of queries ){
-		var outcome = engine.search( query.narr, { similarity: model, reduction: fa } );
+		var outcome = engine.search( query.narr, config);
 		var results = outcome.top(100);
 		for( var i=0; i<results.length; i++ ){
 			outputString += ( query.num + " 0 " + results[i].DocId + " " + i + " " + results[i].score.toFixed(5) + " JSS_" + indexType + "_" + model + "\n" );
 		}
 	}
-	log( {threshold: fa, MAP:getMAP(outputString)} )
+	return getMAP(outputString);
+}
+
+// grid search
+var parameters = {
+	Cosine: {
+		threshold: [...Number.range(0.01, 1, 0.01)]
+	},
+	BM25: {
+		threshold: [...Number.range(0.01, 1, 0.01)],
+		k1: [...Number.range(0.01, 2, 0.02)],
+		k2: [200],
+		b: [...Number.range(0, 1, 0.02)]
+	},
+	LM: {
+		threshold: [...Number.range(0.01, 1, 0.01)],
+		mu: [...Number.range(0, 6000, 50)]
+	}
+}
+
+
+for( let mod of ["Cosine", "BM25", "LM"] ){
+	log("run " + mod)
+
+	var f = run.bind(null, mod);
+	var opt = optimizer(f, parameters[mod], "max", true)
+	log({ opt: opt.optValue, optParams: opt.params })
+
+	// write file
+	var keys = Object.keys(opt.record[0].params)
+	var fp = fs.openSync( tempDir + "reduction_" + mod + ".csv", "w");
+	fs.writeSync(fp, "MAP," + keys.join(",") + "\n" )
+	for( let entry of opt.record ){
+		fs.writeSync(fp, entry.val + "," )
+		for( let key of keys ){
+			fs.writeSync(fp, entry.params[key] + "," )
+		}
+		fs.writeSync(fp, "\n");
+	}
+	fs.closeSync( fp )
 }
