@@ -61,7 +61,7 @@ var getMAP = function(resultString){
 function run(model, params){
 	var outputString = "";
 	var config = { 
-		model: model, 
+		similarity: model, 
 		expansion: {
 			topDoc: params.topDoc,
 			topToken: params.topToken,

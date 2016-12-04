@@ -428,8 +428,7 @@
 			for( let doc of Object.keys(index.meta.length) ){ collection_size += index.meta.length[doc] }
 			query._processor.collection_size = collection_size;
 		}
-
-		var mu = query.config.LM_Dirichlet_mu || JSSConst.GetConfig("query_settings","LM_Dirichlet_mu");
+		var mu = query.config.LM_Dirichlet_mu !== undefined ? query.config.LM_Dirichlet_mu : JSSConst.GetConfig("query_settings","LM_Dirichlet_mu");
 		var sum = 0;
 		for( let key of query.getKeyIterator() ){
 			// log( doc.getTf(key) / index.meta.length[doc.DocId] )
@@ -566,9 +565,14 @@
 		},
 		search: function(query, config){
 			var config = config || {};
+			var configPass = this.config.clone();
+
+			for( let key of Object.keys( config ) ){
+				configPass[key] = config[key];
+			}
 			
 			if( !(query instanceof JSSQueryProcessor.Query) )
-				query = new JSSQueryProcessor.Query(query, this, this.config);
+				query = new JSSQueryProcessor.Query(query, this, configPass);
 
 			if( config.expansion !== undefined && config.expansion !== false )
 				query = this.queryExpansion(query, config)

@@ -71,7 +71,7 @@ var getMAP = function(resultString){
 
 function run(model, params){
 	var outputString = "";
-	var config = { model: model, reduction: params.threshold }
+	var config = { similarity: model, reduction: params.threshold }
 	if( model == "BM25" )
 		config.BM25_parameters = { k1: params.k1, k2: params.k2, b: params.b }
 	else if( model == "LM" )
@@ -105,7 +105,7 @@ var parameters = {
 }
 
 
-for( let mod of ["Cosine", "BM25", "LM"] ){
+for( let mod of ["Cosine", "LM", "BM25"] ){
 	log("run " + mod)
 
 	var f = run.bind(null, mod);

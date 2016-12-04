@@ -10,9 +10,17 @@ var log = function(obj){ console.log(JSON.stringify(obj, null, 2)) }
 
 var engine = new JSSQueryProcessor.QueryProcessor( "./_indexes/single" );
 
-var outcome = engine.search("Control of Food Supplements", {expansion: true})
+var outcome = engine.search("Finance Support", {
+	similarity: "LM",
+	expansion: true,
+	LM_Dirichlet_mu: 2000
+})
 
-log( outcome._query.tf )
+// log( outcome.top(5) )
+// 
+
+
+// console.log(global.range)
 
 
 debugger
