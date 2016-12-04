@@ -50,7 +50,7 @@ for( var i=0; i<lines.length; i++ ){
 var engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/" + indexType );
 
 var getMAP = function(resultString){
-	var fn = tempDir + parseInt( Math.random() * 10000 ) + "eval.tmp",
+	var fn = tempDir + parseInt( Math.random() * 10000000 ) + "eval.tmp",
 		outputFS = fs.openSync(fn, "w");
 
 	fs.writeSync(outputFS, resultString);
