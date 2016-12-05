@@ -460,33 +460,46 @@
 		this.documentCount = Object.keys(this.index.meta.length).length;
 	}
 	JSSQueryProcessor.QueryProcessor.prototype = {
-		_retrieveDocs: function(query){
-
+		_retrieveDocs: function(query, getDocs){
+			if( getDocs != false )
+				getDocs = true
 			var resultByTokens = [];
-			for( let token of query.getTokenIterator() ){
-				// get document list, df and tf
-				var re = this.index.findTerm( token.term, true, token.type );
-				if( !!re ){
-					resultByTokens.push( re );
-					query.addDfByKey( re.DocFreq, token.term, token.type);
+			
+			if( !getDocs ){
+				for( let token of query.getTokenIterator() ){
+					// get document list, df and tf
+					var re = this.index.findTerm( token.term, false, token.type );
+					if( !!re ){
+						query.addDfByKey( re.DocFreq, token.term, token.type);
+					}
 				}
 			}
-			// then reverse to document-keyed version
-			var resultByDocs = new JSSQueryProcessor.SearchResultSet(this, query);
-			for( var i=0; i<resultByTokens.length; i++ ){
-				var token = resultByTokens[i];
-				var ttf = 0;
-				for( var j=0; j<token.Posting.length; j++ ){
-					if( resultByDocs.findDoc( token.Posting[j].DocumentId ) === undefined )
-						resultByDocs.addSearchResult( token.Posting[j].DocumentId );
-					resultByDocs.findDoc( token.Posting[j].DocumentId ).result.addToken( token.Posting[j] )
+			else {
+				for( let token of query.getTokenIterator() ){
+					// get document list, df and tf
+					var re = this.index.findTerm( token.term, true, token.type );
+					if( !!re ){
+						resultByTokens.push( re );
+						query.addDfByKey( re.DocFreq, token.term, token.type);
+					}
+				}
+				// then reverse to document-keyed version
+				var resultByDocs = new JSSQueryProcessor.SearchResultSet(this, query);
+				for( var i=0; i<resultByTokens.length; i++ ){
+					var token = resultByTokens[i];
+					var ttf = 0;
+					for( var j=0; j<token.Posting.length; j++ ){
+						if( resultByDocs.findDoc( token.Posting[j].DocumentId ) === undefined )
+							resultByDocs.addSearchResult( token.Posting[j].DocumentId );
+						resultByDocs.findDoc( token.Posting[j].DocumentId ).result.addToken( token.Posting[j] )
 
-					// count tf under collection(ttf) for LM
-					ttf += token.Posting[j].TermFreq;
+						// count tf under collection(ttf) for LM
+						ttf += token.Posting[j].TermFreq;
+					}
+					query.addTtfByKey(ttf, token.Term, token.Type);
 				}
-				query.addTtfByKey(ttf, token.Term, token.Type);
+				return resultByDocs;
 			}
-			return resultByDocs;
 		},
 		queryExpansion: function(query, config){
 			// return a new JSSQueryProcessor.Query instance
@@ -541,8 +554,7 @@
 			// if percentage is >1, then switch to # of terms 
 			
 			var perc = parseFloat(config.reduction) !== NaN ? parseFloat(config.reduction) : JSSConst.GetConfig("query_settings", "reduction", "percentage")
-
-			this._retrieveDocs(query) // get idf in the query instance
+			this._retrieveDocs(query, false) // get idf in the query instance
 			var list = []
 			for( let token of query.getKeyIterator() ){
 				list.push({
