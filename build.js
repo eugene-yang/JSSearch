@@ -13,7 +13,7 @@ var indexSettings = {
 		"apply_stemmer": false,
 		"parse_phrase": false,
 		"phrase_accept_length": [2,3,4],
-		"parse_special_term": true,
+		"parse_special_term": false,
 		"default_index_with_position": false
 	},
 	"stem": {

@@ -553,7 +553,7 @@
 			// return a new JSSQueryProcessor.Query instance
 			// if percentage is >1, then switch to # of terms 
 			
-			var perc = parseFloat(config.reduction) !== NaN ? parseFloat(config.reduction) : JSSConst.GetConfig("query_settings", "reduction", "percentage")
+			var perc = !isNaN(parseFloat(config.reduction)) ? parseFloat(config.reduction) : JSSConst.GetConfig("query_settings", "reduction", "percentage")
 			this._retrieveDocs(query, false) // get idf in the query instance
 			var list = []
 			for( let token of query.getKeyIterator() ){

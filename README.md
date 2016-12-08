@@ -6,7 +6,14 @@ This is a course project of Information Retrieval in Georgetown University.
 
 ## Environment
 
-- This project is run under nodeJS v6.7.0.
+- This project is run under nodeJS v7.0.0.
+
+Fast and clean way to install nodeJS on Linux:
+
+```shell
+apt-get install nvm
+nvm install node
+```
 
 - Please install dependencies by npm using the following command under the project directory
 
@@ -24,16 +31,24 @@ npm install
 
 - Default similarity parameter settings are listed in `config.json`.
 
-## Scripts Required
+## Scripts
 
-- All arguments required are implemented
-
-- Please use the following commands to execute the require scripts
+For building index:
 
 ```shell
 node build [trec-files-directory-path] [index-type] [output-dir]
-node query_static [index-directory-path] [query-file-path] [retrieval-model] [index-type] [results-file]
-node query_dynamic [index-directory-path] [query-file-path] [results-file] 
+```
+
+Or for using default settings, you can execute `build.bat` on Windows or `build.sh` on Unix-like systems.
+
+For executing query file:
+```shell
+node query_search [index-directory-path] [query-file-path] [retrieval-model] [index-type] [search-type] [optional: results-file]
+```
+
+Or use default directories:
+```
+node query_search -a [retrieval-model] [index-type] [search-type] [optional: results-file]
 ```
 
 ## License

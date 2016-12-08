@@ -22,26 +22,26 @@
 
 
 	"query_settings": {
-		"similarity_measure": "BM25",
+		"similarity_measure": "LM",
 
 		"BM25_parameters": {
-			"k1": 0.05,
+			"k1": 1.59,
 			"k2": 200,
-			"b": 0.09
+			"b": 0.02
 		},
-		"LM_Dirichlet_mu": 6000,
+		"LM_Dirichlet_mu": 400,
 
 		"proximity_phrase_size": 2,
 		"proximity_max_dis": 10,
 		"proximity_sequence": true,
 
 		"expansion": {
-			"topDoc": 20,
-			"topToken": 20,
-			"alpha": 0.7
+			"topDoc": 13,
+			"topToken": 30,
+			"alpha": 0.5
 		},
 		"reduction": {
-			"percentage": 0.8
+			"percentage": 0.94
 		}
 	}
 }

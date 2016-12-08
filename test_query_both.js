@@ -115,12 +115,12 @@ for( let mod of ["Cosine", "LM", "BM25"] ){
 	log("run " + mod)
 
 	var f = run.bind(null, mod);
-	var opt = optimizer(f, parameters[mod], "max", true)
+	var opt = optimizer.narySearch(f, parameters[mod], "max", true)
 	log({ opt: opt.optValue, optParams: opt.params })
 
 	// write file
 	var keys = Object.keys(opt.record[0].params)
-	var fp = fs.openSync( tempDir + "expansion_" + mod + "_" + indexType + ".csv", "w");
+	var fp = fs.openSync( tempDir + "both_" + mod + "_" + indexType + ".csv", "w");
 	fs.writeSync(fp, "Model,MAP," + keys.join(",") + "\n" )
 	for( let entry of opt.record ){
 		fs.writeSync(fp, mod + "," + entry.val + "," )

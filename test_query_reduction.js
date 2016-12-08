@@ -49,24 +49,45 @@ for( var i=0; i<lines.length; i++ ){
 
 var engine = new JSSQueryProcessor.QueryProcessor( indexDir + "/" + indexType );
 
-var getMAP = function(resultString){
-	var fn = tempDir + parseInt( Math.random() * 10000000 ) + "eval.tmp",
-		outputFS = fs.openSync(fn, "w");
+var getMAP = function(resultString, remainFile){
+	if( remainFile == true )
+		var fn = outputFile;
+	else {
+		var fn = tempDir + parseInt( Math.random() * 10000000 ) + "eval.tmp";
+	}
+	var outputFS = fs.openSync(fn, "w");
 
 	fs.writeSync(outputFS, resultString);
 	fs.closeSync(outputFS);
 
 	// run TREC evaluation
-	try{
-		var rawOutcome = execSync("_data\\bin\\trec_eval_Windows ./_data/QueryFile/qrels.txt " + fn).toString();
-	} catch(e){
-		var rawOutcome = e.stdout.toString()
+	
+	var ostype = require("os").type().split("_")[0];
+	var exefn = "./_data/bin/trec_eval_" + ostype;
+
+	if( ostype == "Windows" ){
+		try{
+			var rawOutcome = execSync( ".\\_data\\bin\\trec_eval_Windows ./_data/QueryFile/qrels.txt " + fn).toString();
+		} catch(e){
+			var rawOutcome = e.stdout.toString()
+		}
+		var map = parseFloat(rawOutcome.split("\n")[5].split("\t")[2])
 	}
-	var map = parseFloat(rawOutcome.split("\r\n")[19])
-	fs.unlink(fn)
+	else {
+		try{
+			var rawOutcome = execSync( exefn + " ./_data/QueryFile/qrels.txt " + fn).toString();
+		} catch(e){
+			var rawOutcome = e.stdout.toString()
+		}
+		var map = parseFloat(rawOutcome.split("\n")[5].split("\t")[2])
+	}
+
+	if( remainFile != true )
+		fs.unlinkSync(fn)
 
 	return map;
 }
+
 
 
 function run(model, params){
@@ -77,6 +98,7 @@ function run(model, params){
 	else if( model == "LM" )
 		config.LM_Dirichlet_mu = params.mu
 
+console.time("search time")
 	for( let query of queries ){
 		var outcome = engine.search( indexType == "stem" ? query.narr_stem : query.narr, config);
 		var results = outcome.top(100);
@@ -84,6 +106,7 @@ function run(model, params){
 			outputString += ( query.num + " 0 " + results[i].DocId + " " + i + " " + results[i].score.toFixed(5) + " JSS_" + indexType + "_" + model + "\n" );
 		}
 	}
+	console.timeEnd("search time")
 	return getMAP(outputString);
 }
 
@@ -105,11 +128,11 @@ var parameters = {
 }
 
 
-for( let mod of ["Cosine", "LM", "BM25"] ){
+for( let mod of ["Cosine"] ){
 	log("run " + mod)
 
 	var f = run.bind(null, mod);
-	var opt = optimizer(f, parameters[mod], "max", true)
+	var opt = optimizer.gridSearch(f, parameters[mod], "max", true)
 	log({ opt: opt.optValue, optParams: opt.params })
 
 	// write file

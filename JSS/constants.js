@@ -127,7 +127,7 @@
 			stop = start, start = 0;
 		// digit modify
 		var factor = Math.pow(10, (step.toString() + "." ).split(".")[1].length)
-		for( var i=start; i<stop+step; i+=step )
+		for( var i=start; i<stop; i+=step )
 			yield Math.round(i*factor) / factor;
 	}
 
